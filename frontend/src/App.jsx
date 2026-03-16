@@ -22,9 +22,19 @@ function App() {
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {products.map((product) => (
           <div key={product.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
-            {/* Espacio para la futura imagen */}
-            <div className="h-48 bg-gray-200 flex items-center justify-center">
-              <span className="text-gray-400">Imagen del producto</span>
+           {/* Imagen del producto */}
+            <div className="h-48 w-full bg-gray-100 overflow-hidden">
+              {product.image ? (
+                <img 
+                  src={product.image} 
+                  alt={product.name} 
+                  className="w-full h-full object-cover object-center"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  Sin imagen
+                </div>
+              )}
             </div>
             
             <div className="p-5">
