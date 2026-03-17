@@ -88,6 +88,9 @@ export default function App() {
   const { cart, removeFromCart, cartCount, cartTotal } = useCart(); 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // --- NUEVO: Estado para saber si está cargando el pago ---
+  const [isLoading, setIsLoading] = useState(false);
 
   // Tu Fetch a la base de datos de Django
   useEffect(() => {
@@ -96,6 +99,42 @@ export default function App() {
       .then((data) => setProducts(data))
       .catch((error) => console.error('Error fetching products:', error));
   }, []);
+
+  // --- NUEVA FUNCIÓN: Procesar el pago ---
+  const handlePayment = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Preparamos los datos del carrito para enviarlos a Django
+      const items = cart.map(item => ({
+        title: `${item.product.name} - ${item.variant.color} ${item.variant.size}`,
+        quantity: item.quantity,
+        unit_price: item.product.base_price
+      }));
+
+      // 2. Hacemos la petición a nuestra nueva vista de Mercado Pago
+      const response = await fetch('http://127.0.0.1:8000/api/create_preference/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ items }),
+      });
+
+      const data = await response.json();
+
+      // 3. Si Django nos devuelve el link mágico, redirigimos al cliente
+      if (data.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        alert('Error al generar el pago: ' + (data.error || 'Desconocido'));
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al conectar con el servidor de pagos.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-[#111111] font-sans selection:bg-black selection:text-white relative">
@@ -256,11 +295,12 @@ export default function App() {
             <span className="font-bold text-gray-500 uppercase tracking-widest text-sm">Total a pagar:</span>
             <span className="text-3xl font-black text-black">{formatPrice(cartTotal)}</span>
           </div>
-          <button 
-            disabled={cart.length === 0}
-            className={`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm transition-all ${cart.length === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#009EE3] text-white hover:bg-[#008ACB] shadow-lg shadow-blue-200/50'}`}
+         <button 
+            onClick={handlePayment}
+            disabled={cart.length === 0 || isLoading}
+            className={`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm transition-all ${cart.length === 0 || isLoading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#009EE3] text-white hover:bg-[#008ACB] shadow-lg shadow-blue-200/50'}`}
           >
-            Pagar con Mercado Pago
+            {isLoading ? 'Redirigiendo de forma segura...' : 'Pagar con Mercado Pago'}
           </button>
         </div>
       </div>
