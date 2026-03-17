@@ -52,9 +52,7 @@ const ProductCard = ({ product }) => {
 
 function App() {
   const [products, setProducts] = useState([]);
-  // Traemos el cart (los items) y la función para eliminar
   const { cart, removeFromCart, cartCount, cartTotal } = useCart(); 
-  // Estado para controlar si el panel lateral está abierto o cerrado
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
@@ -70,7 +68,6 @@ function App() {
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Prime E-commerce</h1>
         </div>
-        {/* Hicimos este div cliqueable para abrir el panel */}
         <div 
           onClick={() => setIsCartOpen(true)}
           className="bg-blue-50 px-4 py-2 rounded-lg border border-blue-100 flex items-center gap-4 cursor-pointer hover:bg-blue-100 transition-colors"
@@ -87,7 +84,6 @@ function App() {
       </div>
 
       {/* --- PANEL LATERAL DEL CARRITO --- */}
-      {/* Fondo oscuro transparente */}
       {isCartOpen && (
         <div 
           className="fixed inset-0 bg-black/40 z-40 transition-opacity"
@@ -95,10 +91,8 @@ function App() {
         />
       )}
 
-      {/* Menú deslizable */}
       <div className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         
-        {/* Cabecera del panel */}
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-900">Tu Carrito</h2>
           <button onClick={() => setIsCartOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl font-bold">
@@ -106,7 +100,6 @@ function App() {
           </button>
         </div>
 
-        {/* Lista de productos */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
           {cart.length === 0 ? (
             <p className="text-center text-gray-500 mt-10">Tu carrito está vacío 😢</p>
@@ -132,7 +125,6 @@ function App() {
           )}
         </div>
 
-        {/* Footer con Total y Botón de Pago */}
         <div className="p-6 border-t border-gray-100 bg-gray-50">
           <div className="flex justify-between items-center mb-4">
             <span className="font-semibold text-gray-600">Total a pagar:</span>
