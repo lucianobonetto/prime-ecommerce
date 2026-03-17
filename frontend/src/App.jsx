@@ -3,8 +3,12 @@ import { useCart } from './context/CartContext';
 import { motion } from "framer-motion";
 import { 
   ShoppingCart, Search, Menu, X, ArrowRight, 
-  Star, Truck, ShieldCheck, CreditCard, ChevronRight 
+  Star, Truck, ShieldCheck, CreditCard, ChevronRight, 
+  Home
 } from "lucide-react";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Success from './pages/Success';
+import Failure from './pages/Failure';
 
 // Formateador de moneda estilo argentino
 const formatPrice = (price) => {
@@ -83,7 +87,7 @@ const ProductCard = ({ product }) => {
 };
 
 // --- APLICACIÓN PRINCIPAL ---
-export default function App() {
+  function Catalog() {
   const [products, setProducts] = useState([]);
   const { cart, removeFromCart, cartCount, cartTotal } = useCart(); 
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -306,5 +310,17 @@ export default function App() {
       </div>
 
     </div>
+  );
+}
+export default function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Catalog />} />
+        <Route path="/success" element={<Success />} />
+        {/* Agregamos la ruta de error */}
+        <Route path="/failure" element={<Failure />} />
+      </Routes>
+    </Router>
   );
 }
