@@ -1,21 +1,23 @@
 from django.contrib import admin
-from .models import Category, Product, ProductVariant
+from .models import Category, Product, Order, OrderItem
 
-# Esto permite cargar variantes (colores/talles) dentro de la misma pantalla del producto
-class ProductVariantInline(admin.TabularInline):
-    model = ProductVariant
-    extra = 1
+# Tus catálogos (lo que ya tenías)
+admin.site.register(Category)
+admin.site.register(Product)
 
-class ProductAdmin(admin.ModelAdmin):
-    inlines = [ProductVariantInline]
-    list_display = ('name', 'category', 'base_price', 'is_active') # Columnas que vas a ver en la lista
-    list_filter = ('category', 'is_active') # Filtros laterales
-    search_fields = ('name',)
+# --- NUEVA SECCIÓN DE VENTAS ---
 
-class CategoryAdmin(admin.ModelAdmin):
-    # Esto autocompleta el slug (URL) mientras escribís el nombre de la categoría
-    prepopulated_fields = {'slug': ('name',)} 
+# Esto nos permite ver los ítems (relojes) adentro de la pantalla de la orden
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 0 # Para que no muestre filas vacías extra
+    readonly_fields = ['price'] # Para no cambiar el precio histórico por error
 
-# Registramos todo en el panel
-admin.site.register(Category, CategoryAdmin)
-admin.site.register(Product, ProductAdmin)
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    # Columnas que vas a ver en la lista principal de ventas
+    list_display = ['id', 'status', 'total', 'created_at', 'payment_id']
+    # Filtros laterales para buscar rápido
+    list_filter = ['status', 'created_at']
+    # Adjuntamos los relojes a la vista
+    inlines = [OrderItemInline]

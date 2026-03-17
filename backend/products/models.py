@@ -32,3 +32,32 @@ class ProductVariant(models.Model):
     
     def __str__(self):
         return f"{self.product.name} - {self.color or ''} {self.size or ''}"
+# acá arriba están las clases Category y Product
+
+class Order(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'Pendiente'),
+        ('paid', 'Pagado'),
+        ('failed', 'Rechazado'),
+    )
+    
+    # ID del pago que nos devuelva Mercado Pago (para rastrearlo)
+    payment_id = models.CharField(max_length=100, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Orden #{self.id} - {self.get_status_display()}"
+
+class OrderItem(models.Model):
+    # Conectamos este ítem con su orden general
+    order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
+    # Conectamos con el producto que compró
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    quantity = models.PositiveIntegerField(default=1)
+    # Guardamos el precio en este momento (por si mañana el reloj aumenta de precio)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.quantity}x {self.product.name} (Orden #{self.order.id})"
