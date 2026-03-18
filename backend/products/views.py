@@ -53,11 +53,12 @@ def create_preference(request):
                 "currency_id": "ARS"
             })
 
-        # 4. Le mandamos los datos a Mercado Pago
+       # 4. Le mandamos los datos a Mercado Pago
         preference_data = {
             "items": items_for_mp,
-            # Le pasamos el ID de nuestra orden para que MP nos lo devuelva después
             "external_reference": str(order.id), 
+          # ¡TU LINK NUEVO DE LHR.LIFE!
+            "notification_url": "https://fda5bc0e621a53.lhr.life/api/products/webhook/",
         }
 
         preference_response = sdk.preference().create(preference_data)
@@ -70,3 +71,40 @@ def create_preference(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+def mercadopago_webhook(request):
+    try:
+        # 1. MP nos manda un aviso con un ID de pago
+        payment_id = request.data.get('data', {}).get('id')
+        
+        if payment_id:
+            sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+            # 2. Le preguntamos a MP los detalles oficiales de ese pago
+            payment_info = sdk.payment().get(payment_id)
+            
+            if payment_info["status"] == 200:
+                payment = payment_info["response"]
+                
+                # 3. Recuperamos el ID de nuestra orden (el external_reference)
+                order_id = payment.get("external_reference")
+                status_mp = payment.get("status") 
+                
+                if order_id:
+                    # 4. Buscamos la orden en la base de datos y la actualizamos
+                    order = Order.objects.get(id=order_id)
+                    order.payment_id = payment_id
+                    
+                    if status_mp == 'approved':
+                        order.status = 'paid'
+                    elif status_mp in ['rejected', 'cancelled']:
+                        order.status = 'failed'
+                        
+                    order.save()
+                    print(f"\n✅ ¡ÉXITO! Orden #{order.id} actualizada a: {order.status}\n")
+                    
+        return Response(status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"Error en webhook: {e}")
+        return Response(status=status.HTTP_400_BAD_REQUEST)
