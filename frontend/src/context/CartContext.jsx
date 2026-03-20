@@ -1,43 +1,64 @@
-import { createContext, useState, useContext } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
 
-export const useCart = () => useContext(CartContext);
+export function CartProvider({ children }) {
+  // Inicializamos el carrito leyendo el localStorage (si existe)
+  const [cart, setCart] = useState(() => {
+    const savedCart = localStorage.getItem('primeCart');
+    return savedCart ? JSON.parse(savedCart) : [];
+  });
 
-export const CartProvider = ({ children }) => {
-  const [cart, setCart] = useState([]);
+  // Cada vez que el carrito cambia, lo guardamos en el navegador
+  useEffect(() => {
+    localStorage.setItem('primeCart', JSON.stringify(cart));
+  }, [cart]);
 
-  const addToCart = (product, selectedVariant) => {
-    if (!selectedVariant) {
-      alert("Por favor, seleccioná una opción antes de agregar al carrito.");
-      return;
-    }
-
+  const addToCart = (producto, variante) => {
     setCart((prevCart) => {
-      const existingItem = prevCart.find(item => item.variant.id === selectedVariant.id);
+      const existingItem = prevCart.find((item) => item.variante.id === variante.id);
+      
       if (existingItem) {
-        return prevCart.map(item => 
-          item.variant.id === selectedVariant.id 
-            ? { ...item, quantity: item.quantity + 1 } 
+        // Si ya está en el carrito, verificamos no pasarnos del stock real
+        if (existingItem.cantidad >= variante.stock_disponible) {
+          alert('No hay más stock disponible para esta variante.');
+          return prevCart;
+        }
+        return prevCart.map((item) =>
+          item.variante.id === variante.id
+            ? { ...item, cantidad: item.cantidad + 1 }
             : item
         );
       }
-      return [...prevCart, { product, variant: selectedVariant, quantity: 1 }];
+      // Si es nuevo, lo agregamos con cantidad 1
+      return [...prevCart, { producto, variante, cantidad: 1 }];
     });
   };
 
-  // --- NUEVA FUNCIÓN: Eliminar del carrito ---
-  const removeFromCart = (variantId) => {
-    setCart((prevCart) => prevCart.filter(item => item.variant.id !== variantId));
+  const removeFromCart = (varianteId) => {
+    setCart((prevCart) => prevCart.filter((item) => item.variante.id !== varianteId));
   };
 
-  const cartTotal = cart.reduce((total, item) => total + (item.product.base_price * item.quantity), 0);
-  const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
+  const clearCart = () => {
+    setCart([]);
+    localStorage.removeItem('primeCart');
+  };
+
+  // Cálculos automáticos
+  const cartCount = cart.reduce((total, item) => total + item.cantidad, 0);
+  
+  // Usamos precio_final si existe (por descuentos), sino precio_base
+  const cartTotal = cart.reduce((total, item) => {
+    const precio = item.variante.precio_final || item.variante.precio_base;
+    return total + (parseFloat(precio) * item.cantidad);
+  }, 0);
 
   return (
-    // Agregamos removeFromCart acá para que toda la app pueda usarlo
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
+    <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal }}>
       {children}
     </CartContext.Provider>
   );
-};
+}
+
+// Hook personalizado para usar el carrito fácilmente
+export const useCart = () => useContext(CartContext);

@@ -1,21 +1,25 @@
 from rest_framework import serializers
-from .models import Category, Product, ProductVariant
+from .models import Categoria, Producto, Variante
 
-class ProductVariantSerializer(serializers.ModelSerializer):
+class VarianteSerializer(serializers.ModelSerializer):
+    # Agregamos precio_final como un campo extra que calculamos en el modelo
+    precio_final = serializers.ReadOnlyField()
+
     class Meta:
-        model = ProductVariant
-        fields = ['id', 'color', 'size', 'stock']
+        model = Variante
+        # Usamos los nombres exactos de tu diagrama y modelos
+        fields = ['id', 'sku', 'talle', 'color', 'precio_base', 'descuento_porcentual', 'stock_disponible', 'precio_final']
 
 class ProductSerializer(serializers.ModelSerializer):
-    # Esto anida las variantes adentro del producto
-    variants = ProductVariantSerializer(many=True, read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    # Esto anida las variantes adentro del producto (usamos el related_name del modelo)
+    variantes = VarianteSerializer(many=True, read_only=True)
+    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
 
     class Meta:
-        model = Product
-        fields = ['id', 'name', 'description', 'image', 'base_price', 'category_name', 'variants']
+        model = Producto
+        fields = ['id', 'nombre', 'descripcion', 'categoria_nombre', 'variantes']
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
-        model = Category
-        fields = ['id', 'name', 'slug']
+        model = Categoria
+        fields = ['id', 'nombre']

@@ -3,16 +3,20 @@ from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Category, Product, Order, OrderItem
+from django.db import transaction
+from django.db.models import F
+
+# Importamos con los nombres EXACTOS de tu models.py
+from .models import Categoria, Producto, Variante, Pedido, ItemPedido
 from .serializers import CategorySerializer, ProductSerializer
 
-# --- VISTAS DEL CATÁLOGO (Lo que ya tenías) ---
+# --- VISTAS DEL CATÁLOGO ---
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Category.objects.all()
+    queryset = Categoria.objects.all()
     serializer_class = CategorySerializer
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Product.objects.filter(is_active=True)
+    queryset = Producto.objects.all() 
     serializer_class = ProductSerializer
 
 @api_view(['POST'])
@@ -21,43 +25,70 @@ def create_preference(request):
         sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
         cart_items = request.data.get('items', [])
         
-        # 1. Calculamos el total recorriendo el carrito
-        total_price = sum(float(item['unit_price']) * int(item['quantity']) for item in cart_items)
+        # Variables seguras calculadas en el backend
+        total_price_seguro = 0
+        items_for_mp = []
         
-        # 2. Creamos la orden en la base de datos en estado "pending"
-        order = Order.objects.create(
-            total=total_price,
-            status='pending'
+        # --- NUEVO: VALIDACIÓN ESTRICTA DE STOCK Y CÁLCULO SEGURO ---
+        for item in cart_items:
+            cantidad_solicitada = int(item.get('quantity', 0))
+            
+            # Bloqueo 1: Cantidades inválidas (cero o negativas)
+            if cantidad_solicitada <= 0:
+                return Response(
+                    {'error': f"La cantidad para el item {item.get('title')} debe ser mayor a 0."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Bloqueo 2: Verificación de stock y obtención del PRECIO REAL
+            try:
+                variante = Variante.objects.get(id=item.get('id'))
+                
+                if variante.stock_disponible < cantidad_solicitada:
+                    return Response(
+                        {'error': f"Stock insuficiente para {item.get('title')}. Solo quedan {variante.stock_disponible} unidades."}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # CÁLCULO SEGURO: Usamos el precio final de la base de datos, ignorando el del frontend
+                precio_unitario_real = variante.precio_final
+                total_price_seguro += float(precio_unitario_real) * cantidad_solicitada
+
+                # Preparamos el item para MP con los datos seguros
+                items_for_mp.append({
+                    "title": f"{variante.producto.nombre} ({variante.talle}/{variante.color})",
+                    "quantity": cantidad_solicitada,
+                    "unit_price": float(precio_unitario_real),
+                    "currency_id": "ARS"
+                })
+
+            except Variante.DoesNotExist:
+                return Response(
+                    {'error': f"El producto {item.get('title')} ya no existe en el catálogo."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        # --- FIN DE VALIDACIÓN Y CÁLCULO ---
+
+        # Creamos el PEDIDO con el total seguro
+        pedido = Pedido.objects.create(
+            total_final=total_price_seguro,
+            estado='pendiente'
         )
 
-        items_for_mp = []
+        # Guardamos el historial de items del pedido
         for item in cart_items:
-            # 3. Anotamos cada reloj en la base de datos (OrderItem)
-            try:
-                # Buscamos el producto real en la base de datos usando el ID que manda React
-                product = Product.objects.get(id=item.get('id'))
-                OrderItem.objects.create(
-                    order=order,
-                    product=product,
-                    quantity=int(item['quantity']),
-                    price=float(item['unit_price'])
-                )
-            except Product.DoesNotExist:
-                print(f"Ojo: No se encontró el producto con ID {item.get('id')}")
+            variante = Variante.objects.get(id=item.get('id'))
+            ItemPedido.objects.create(
+                pedido=pedido,
+                variante=variante,
+                cantidad=int(item['quantity']),
+                precio_historico=float(variante.precio_final) # Guardamos el precio seguro
+            )
 
-            # Preparamos el formato que exige Mercado Pago
-            items_for_mp.append({
-                "title": item['title'],
-                "quantity": int(item['quantity']),
-                "unit_price": float(item['unit_price']),
-                "currency_id": "ARS"
-            })
-
-       # 4. Le mandamos los datos a Mercado Pago
+        # 4. Mercado Pago
         preference_data = {
             "items": items_for_mp,
-            "external_reference": str(order.id), 
-          # ¡TU LINK NUEVO DE LHR.LIFE!
+            "external_reference": str(pedido.id), 
             "notification_url": "https://fda5bc0e621a53.lhr.life/api/products/webhook/",
         }
 
@@ -72,36 +103,40 @@ def create_preference(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(['POST'])
 def mercadopago_webhook(request):
     try:
-        # 1. MP nos manda un aviso con un ID de pago
         payment_id = request.data.get('data', {}).get('id')
         
         if payment_id:
             sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
-            # 2. Le preguntamos a MP los detalles oficiales de ese pago
             payment_info = sdk.payment().get(payment_id)
             
             if payment_info["status"] == 200:
                 payment = payment_info["response"]
-                
-                # 3. Recuperamos el ID de nuestra orden (el external_reference)
                 order_id = payment.get("external_reference")
                 status_mp = payment.get("status") 
                 
                 if order_id:
-                    # 4. Buscamos la orden en la base de datos y la actualizamos
-                    order = Order.objects.get(id=order_id)
-                    order.payment_id = payment_id
-                    
-                    if status_mp == 'approved':
-                        order.status = 'paid'
-                    elif status_mp in ['rejected', 'cancelled']:
-                        order.status = 'failed'
+                    with transaction.atomic():
+                        pedido = Pedido.objects.select_for_update().get(id=order_id)
                         
-                    order.save()
-                    print(f"\n✅ ¡ÉXITO! Orden #{order.id} actualizada a: {order.status}\n")
+                        if pedido.estado == 'pendiente' and status_mp == 'approved':
+                            pedido.estado = 'pagado'
+                            
+                            # DESCUENTO DE STOCK SEGURO
+                            items_del_pedido = ItemPedido.objects.filter(pedido=pedido)
+                            for item in items_del_pedido:
+                                Variante.objects.filter(id=item.variante.id).update(
+                                    stock_disponible=F('stock_disponible') - item.cantidad
+                                )
+
+                        elif status_mp in ['rejected', 'cancelled']:
+                            pedido.estado = 'fallido'
+                            
+                        pedido.save()
+                        print(f"✅ Pedido #{pedido.id} actualizado a: {pedido.estado}. Stock descontado si fue pagado.")
                     
         return Response(status=status.HTTP_200_OK)
     
