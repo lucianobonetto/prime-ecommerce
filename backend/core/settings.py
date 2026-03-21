@@ -138,3 +138,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Configuración por defecto para IDs (lo pide Django 3.2+)
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- CONFIGURACIÓN DE REST FRAMEWORK Y SEGURIDAD JWT ---
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}

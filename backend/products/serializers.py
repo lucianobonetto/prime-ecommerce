@@ -7,17 +7,19 @@ class VarianteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Variante
-        # Usamos los nombres exactos de tu diagrama y modelos
         fields = ['id', 'sku', 'talle', 'color', 'precio_base', 'descuento_porcentual', 'stock_disponible', 'precio_final']
 
 class ProductSerializer(serializers.ModelSerializer):
-    # Esto anida las variantes adentro del producto (usamos el related_name del modelo)
     variantes = VarianteSerializer(many=True, read_only=True)
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    
+    # NUEVO: Traducimos 'imagen' de Django a 'image' para React, y forzamos la URL
+    image = serializers.ImageField(source='imagen', read_only=True)
 
     class Meta:
         model = Producto
-        fields = ['id', 'nombre', 'descripcion', 'categoria_nombre', 'variantes']
+        # Agregamos 'image' a la lista para que viaje hacia el Frontend
+        fields = ['id', 'nombre', 'descripcion', 'categoria_nombre', 'image', 'variantes']
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:

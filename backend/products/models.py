@@ -73,6 +73,19 @@ class ItemCarrito(models.Model):
     def __str__(self):
         return f"{self.cantidad} x {self.variante.sku}"
 
+# --- NUEVO: LIBRETA DE DIRECCIONES DEL USUARIO ---
+class Direccion(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='direcciones')
+    calle = models.CharField(max_length=200)
+    numero = models.CharField(max_length=50)
+    codigo_postal = models.CharField(max_length=20)
+    ciudad = models.CharField(max_length=100)
+    telefono = models.CharField(max_length=50)
+    descripcion = models.CharField(max_length=200, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.calle} {self.numero}, {self.ciudad}"
+
 # --- PEDIDO E ITEMS (Historial inmutable) ---
 class Pedido(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -80,6 +93,15 @@ class Pedido(models.Model):
     estado = models.CharField(max_length=50, default='pendiente')
     total_final = models.DecimalField(max_digits=10, decimal_places=2)
     payment_id = models.CharField(max_length=100, null=True, blank=True)
+    
+    # SNAPSHOT DE ENVÍO (Foto inmutable del momento de la compra)
+    metodo_envio = models.CharField(max_length=50, default='sucursal')
+    envio_calle = models.CharField(max_length=200, null=True, blank=True)
+    envio_numero = models.CharField(max_length=50, null=True, blank=True)
+    envio_codigo_postal = models.CharField(max_length=20, null=True, blank=True)
+    envio_ciudad = models.CharField(max_length=100, null=True, blank=True)
+    envio_telefono = models.CharField(max_length=50, null=True, blank=True)
+    envio_descripcion = models.CharField(max_length=200, null=True, blank=True)
 
     def __str__(self):
         return f"Pedido #{self.id} - {self.estado}"
@@ -93,11 +115,10 @@ class ItemPedido(models.Model):
     def __str__(self):
         return f"{self.cantidad} x {self.variante.producto.nombre} (Pedido {self.pedido.id})"
 
-# --- NUEVO: PERFIL DE USUARIO ---
+# --- PERFIL DE USUARIO ---
 class PerfilUsuario(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
     telefono = models.CharField(max_length=50, null=True, blank=True)
-    direccion = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return f"Perfil de {self.usuario.username}"

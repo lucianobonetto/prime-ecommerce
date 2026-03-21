@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, X, User } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext'; // NUEVO IMPORT
 
-// Formateador de moneda estilo argentino
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
     style: 'currency', 
@@ -14,41 +14,9 @@ const formatPrice = (price) => {
 
 export default function Layout({ children }) {
   const { cart, removeFromCart, cartCount, cartTotal } = useCart(); 
+  const { isAuthenticated } = useAuth(); // NUEVO: Saber si está logueado
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Lógica de pago conectada a tu backend de Django
-  const handlePayment = async () => {
-    setIsLoading(true);
-    try {
-      const items = cart.map(item => ({
-        id: item.variante.id,
-        title: `${item.producto.nombre} - ${item.variante.color} ${item.variante.talle}`,
-        quantity: item.cantidad,
-        unit_price: item.variante.precio_base
-      }));
-
-      const response = await fetch('http://127.0.0.1:8000/api/create_preference/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
-      });
-
-      const data = await response.json();
-
-      if (data.init_point) {
-        window.location.href = data.init_point;
-      } else {
-        alert('Error al generar el pago: ' + (data.error || 'Desconocido'));
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error al conectar con el servidor de pagos.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-[#111111] font-sans selection:bg-black selection:text-white relative">
@@ -73,8 +41,8 @@ export default function Layout({ children }) {
               <Search size={20} />
             </button>
             
-            {/* NUEVO: Botón de Perfil */}
-            <Link to="/perfil" className="hover:text-black transition-colors hidden sm:block">
+            {/* NUEVO: Redirección inteligente */}
+            <Link to={isAuthenticated ? "/perfil" : "/auth"} className="hover:text-black transition-colors hidden sm:block">
               <User size={22} />
             </Link>
 
@@ -154,16 +122,21 @@ export default function Layout({ children }) {
 
         <div className="p-6 border-t border-gray-100 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
           <div className="flex justify-between items-center mb-6">
-            <span className="font-bold text-gray-500 uppercase tracking-widest text-sm">Total a pagar:</span>
+            <span className="font-bold text-gray-500 uppercase tracking-widest text-sm">Subtotal:</span>
             <span className="text-3xl font-black text-black">{formatPrice(cartTotal)}</span>
           </div>
-          <button 
-            onClick={handlePayment}
-            disabled={cart.length === 0 || isLoading}
-            className={`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm transition-all ${cart.length === 0 || isLoading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#009EE3] text-white hover:bg-[#008ACB] shadow-lg shadow-blue-200/50 active:scale-95'}`}
+          
+          <Link 
+            to="/carrito"
+            onClick={() => setIsCartOpen(false)}
+            className={`w-full py-4 flex justify-center items-center rounded-xl font-bold uppercase tracking-widest text-sm transition-all shadow-md ${
+              cart.length === 0 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none' 
+                : 'bg-black text-white hover:bg-gray-800 active:scale-95'
+            }`}
           >
-            {isLoading ? 'Conectando...' : 'Pagar con Mercado Pago'}
-          </button>
+            Ir al Checkout
+          </Link>
         </div>
       </div>
     </div>

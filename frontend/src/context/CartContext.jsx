@@ -3,13 +3,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const CartContext = createContext();
 
 export function CartProvider({ children }) {
-  // Inicializamos el carrito leyendo el localStorage (si existe)
   const [cart, setCart] = useState(() => {
     const savedCart = localStorage.getItem('primeCart');
     return savedCart ? JSON.parse(savedCart) : [];
   });
 
-  // Cada vez que el carrito cambia, lo guardamos en el navegador
   useEffect(() => {
     localStorage.setItem('primeCart', JSON.stringify(cart));
   }, [cart]);
@@ -17,9 +15,7 @@ export function CartProvider({ children }) {
   const addToCart = (producto, variante) => {
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.variante.id === variante.id);
-      
       if (existingItem) {
-        // Si ya está en el carrito, verificamos no pasarnos del stock real
         if (existingItem.cantidad >= variante.stock_disponible) {
           alert('No hay más stock disponible para esta variante.');
           return prevCart;
@@ -30,9 +26,24 @@ export function CartProvider({ children }) {
             : item
         );
       }
-      // Si es nuevo, lo agregamos con cantidad 1
       return [...prevCart, { producto, variante, cantidad: 1 }];
     });
+  };
+
+  // NUEVA FUNCIÓN: Para el control de + y - en el carrito completo
+  const updateQuantity = (varianteId, newQuantity) => {
+    if (newQuantity < 1) return; // No permitimos bajar de 1 (para eso está el botón eliminar)
+    
+    setCart((prevCart) => prevCart.map((item) => {
+      if (item.variante.id === varianteId) {
+        if (newQuantity > item.variante.stock_disponible) {
+          alert(`Solo quedan ${item.variante.stock_disponible} unidades disponibles.`);
+          return item;
+        }
+        return { ...item, cantidad: newQuantity };
+      }
+      return item;
+    }));
   };
 
   const removeFromCart = (varianteId) => {
@@ -44,21 +55,19 @@ export function CartProvider({ children }) {
     localStorage.removeItem('primeCart');
   };
 
-  // Cálculos automáticos
   const cartCount = cart.reduce((total, item) => total + item.cantidad, 0);
   
-  // Usamos precio_final si existe (por descuentos), sino precio_base
   const cartTotal = cart.reduce((total, item) => {
     const precio = item.variante.precio_final || item.variante.precio_base;
     return total + (parseFloat(precio) * item.cantidad);
   }, 0);
 
+  // Agregamos updateQuantity al Provider
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal }}>
+    <CartContext.Provider value={{ cart, addToCart, updateQuantity, removeFromCart, clearCart, cartCount, cartTotal }}>
       {children}
     </CartContext.Provider>
   );
 }
 
-// Hook personalizado para usar el carrito fácilmente
 export const useCart = () => useContext(CartContext);
