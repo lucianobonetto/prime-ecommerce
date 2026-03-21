@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
 from django.db.models import F
+from django.shortcuts import redirect
 
 # Importamos con los nombres EXACTOS de tu models.py
 from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario, Direccion
@@ -190,7 +191,13 @@ def create_preference(request):
         preference_data = {
             "items": items_for_mp,
             "external_reference": str(pedido.id), 
-            "notification_url": "https://fda5bc0e621a53.lhr.life/api/products/webhook/",
+           "notification_url": "https://697d9a6d93a1dd.lhr.life/api/webhook/",
+        "back_urls": {
+            "success": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/",
+            "failure": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/",
+            "pending": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/"
+        },
+            "auto_return": "approved",
         }
 
         preference_response = sdk.preference().create(preference_data)
@@ -303,3 +310,8 @@ def registro_usuario(request):
         
     except Exception as e:
         return Response({'error': f'Error interno: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+def mercadopago_redirect(request):
+    # Mercado Pago nos manda acá por tener HTTPS, y nosotros rebotamos al cliente a su React local
+    return redirect('http://localhost:5173/success')

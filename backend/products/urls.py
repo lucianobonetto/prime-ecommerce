@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from .views import CategoryViewSet, ProductViewSet, create_preference, mercadopago_webhook, mercadopago_redirect
 
 # Importamos el archivo views completo desde la misma carpeta (.)
 from . import views
@@ -35,4 +36,5 @@ urlpatterns = [
     # Rutas para la Libreta de Direcciones 
     path('mis-direcciones/', views.mis_direcciones, name='mis-direcciones'),
     path('mis-direcciones/<int:pk>/', views.direccion_detalle, name='direccion-detalle'),
+    path('mp-redirect/', mercadopago_redirect, name='mp_redirect'),
 ]

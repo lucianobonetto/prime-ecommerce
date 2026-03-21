@@ -330,9 +330,23 @@ export default function CartPage() {
             <p className="text-center text-[10px] text-gray-400 mt-4 font-bold uppercase tracking-widest">
               Pago 100% seguro y encriptado
             </p>
+         </div>
+          </aside>
+        </div>
+
+        {/* NUEVO: VENTANITA EMERGENTE (MODAL) DE CARGA */}
+        {isLoading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all">
+            <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-pulse">
+              <div className="w-16 h-16 border-4 border-[#009EE3] border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+              <h3 className="text-2xl font-black text-black mb-2 tracking-tight">Preparando tu pago</h3>
+              <p className="text-gray-500 font-medium text-sm">
+                Serás redirigido a Mercado Pago de forma segura en unos segundos...
+              </p>
+            </div>
           </div>
-        </aside>
+        )}
+
       </div>
-    </div>
-  );
+    );
 }
