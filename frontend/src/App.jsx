@@ -7,6 +7,7 @@ import ProductDetail from './pages/ProductDetail';
 import Categories from './pages/Categories';
 import Success from './pages/Success';
 import Failure from './pages/Failure';
+import Profile from './pages/Profile';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/productos/:id" element={<ProductDetail />} />
           <Route path="/categorias" element={<Categories />} />
           <Route path="/success" element={<Success />} />
+          <Route path="/perfil" element={<Profile />} />
           <Route path="/failure" element={<Failure />} />
         </Routes>
       </Layout>

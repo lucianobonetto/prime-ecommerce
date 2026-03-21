@@ -1,13 +1,14 @@
 import mercadopago
 from django.conf import settings
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import F
 
 # Importamos con los nombres EXACTOS de tu models.py
-from .models import Categoria, Producto, Variante, Pedido, ItemPedido
+from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario
 from .serializers import CategorySerializer, ProductSerializer
 
 # --- VISTAS DEL CATÁLOGO ---
@@ -19,42 +20,81 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Producto.objects.all() 
     serializer_class = ProductSerializer
 
+# --- NUEVAS VISTAS DE PERFIL (Protegidas) ---
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def mi_perfil(request):
+    user = request.user
+    perfil, created = PerfilUsuario.objects.get_or_create(usuario=user)
+
+    if request.method == 'GET':
+        data = {
+            "nombre": user.first_name,
+            "apellido": user.last_name,
+            "email": user.email,
+            "telefono": perfil.telefono,
+            "direccion": perfil.direccion
+        }
+        return Response(data)
+
+    elif request.method == 'PUT':
+        # Actualizamos datos del User nativo
+        user.first_name = request.data.get('nombre', user.first_name)
+        user.last_name = request.data.get('apellido', user.last_name)
+        user.email = request.data.get('email', user.email)
+        user.save()
+
+        # Actualizamos datos del Perfil extendido
+        perfil.telefono = request.data.get('telefono', perfil.telefono)
+        perfil.direccion = request.data.get('direccion', perfil.direccion)
+        perfil.save()
+
+        return Response({"mensaje": "Perfil actualizado exitosamente."})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mis_pedidos(request):
+    # Trae SOLO los pedidos de este usuario
+    pedidos = Pedido.objects.filter(usuario=request.user).order_by('-fecha')
+    data = []
+    
+    for pedido in pedidos:
+        items = ItemPedido.objects.filter(pedido=pedido)
+        resumen = ", ".join([f"{item.variante.producto.nombre} ({item.variante.talle}) x{item.cantidad}" for item in items])
+        
+        data.append({
+            "id": pedido.id,
+            "fecha": pedido.fecha,
+            "total_final": pedido.total_final,
+            "estado": pedido.estado,
+            "items_resumen": resumen if resumen else "Sin items detallados"
+        })
+        
+    return Response(data)
+
+# --- VISTAS DE PAGO (Siguen intactas) ---
 @api_view(['POST'])
 def create_preference(request):
     try:
         sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
         cart_items = request.data.get('items', [])
         
-        # Variables seguras calculadas en el backend
         total_price_seguro = 0
         items_for_mp = []
         
-        # --- NUEVO: VALIDACIÓN ESTRICTA DE STOCK Y CÁLCULO SEGURO ---
         for item in cart_items:
             cantidad_solicitada = int(item.get('quantity', 0))
-            
-            # Bloqueo 1: Cantidades inválidas (cero o negativas)
             if cantidad_solicitada <= 0:
-                return Response(
-                    {'error': f"La cantidad para el item {item.get('title')} debe ser mayor a 0."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': f"La cantidad para el item {item.get('title')} debe ser mayor a 0."}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Bloqueo 2: Verificación de stock y obtención del PRECIO REAL
             try:
                 variante = Variante.objects.get(id=item.get('id'))
-                
                 if variante.stock_disponible < cantidad_solicitada:
-                    return Response(
-                        {'error': f"Stock insuficiente para {item.get('title')}. Solo quedan {variante.stock_disponible} unidades."}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({'error': f"Stock insuficiente para {item.get('title')}. Solo quedan {variante.stock_disponible} unidades."}, status=status.HTTP_400_BAD_REQUEST)
                 
-                # CÁLCULO SEGURO: Usamos el precio final de la base de datos, ignorando el del frontend
                 precio_unitario_real = variante.precio_final
                 total_price_seguro += float(precio_unitario_real) * cantidad_solicitada
 
-                # Preparamos el item para MP con los datos seguros
                 items_for_mp.append({
                     "title": f"{variante.producto.nombre} ({variante.talle}/{variante.color})",
                     "quantity": cantidad_solicitada,
@@ -63,29 +103,26 @@ def create_preference(request):
                 })
 
             except Variante.DoesNotExist:
-                return Response(
-                    {'error': f"El producto {item.get('title')} ya no existe en el catálogo."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        # --- FIN DE VALIDACIÓN Y CÁLCULO ---
+                return Response({'error': f"El producto {item.get('title')} ya no existe en el catálogo."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Creamos el PEDIDO con el total seguro
+        # Si el usuario está logueado en React y pasa el token, lo asociamos. Si no, queda como invitado (null)
+        usuario_pedido = request.user if request.user.is_authenticated else None
+
         pedido = Pedido.objects.create(
+            usuario=usuario_pedido, # NUEVO: Vinculamos el pedido al usuario que lo compró
             total_final=total_price_seguro,
             estado='pendiente'
         )
 
-        # Guardamos el historial de items del pedido
         for item in cart_items:
             variante = Variante.objects.get(id=item.get('id'))
             ItemPedido.objects.create(
                 pedido=pedido,
                 variante=variante,
                 cantidad=int(item['quantity']),
-                precio_historico=float(variante.precio_final) # Guardamos el precio seguro
+                precio_historico=float(variante.precio_final)
             )
 
-        # 4. Mercado Pago
         preference_data = {
             "items": items_for_mp,
             "external_reference": str(pedido.id), 
@@ -125,7 +162,6 @@ def mercadopago_webhook(request):
                         if pedido.estado == 'pendiente' and status_mp == 'approved':
                             pedido.estado = 'pagado'
                             
-                            # DESCUENTO DE STOCK SEGURO
                             items_del_pedido = ItemPedido.objects.filter(pedido=pedido)
                             for item in items_del_pedido:
                                 Variante.objects.filter(id=item.variante.id).update(

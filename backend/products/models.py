@@ -4,6 +4,8 @@ from decimal import Decimal
 import qrcode
 from io import BytesIO
 from django.core.files import File
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 # --- CATEGORÍA ---
 class Categoria(models.Model):
@@ -34,23 +36,19 @@ class Variante(models.Model):
     precio_base = models.DecimalField(max_digits=10, decimal_places=2)
     descuento_porcentual = models.IntegerField(default=0)
     stock_disponible = models.PositiveIntegerField(default=0)
-    # Nuevo campo para el código QR
     qr_code = models.ImageField(upload_to='qrcodes/', blank=True, null=True)
 
     @property
     def precio_final(self):
-        # Cálculo preciso usando Decimal para evitar errores de centavos
         descuento = Decimal(self.descuento_porcentual) / Decimal(100)
         return self.precio_base * (Decimal(1) - descuento)
 
     def save(self, *args, **kwargs):
-        # Genera el QR automáticamente si hay SKU y todavía no hay imagen QR
         if self.sku and not self.qr_code:
             qr_image = qrcode.make(self.sku)
             buffer = BytesIO()
             qr_image.save(buffer, format='PNG')
             file_name = f'qr-{self.sku}.png'
-            # save=False evita un bucle infinito al guardar
             self.qr_code.save(file_name, File(buffer), save=False)
             
         super().save(*args, **kwargs)
@@ -81,16 +79,31 @@ class Pedido(models.Model):
     fecha = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=50, default='pendiente')
     total_final = models.DecimalField(max_digits=10, decimal_places=2)
-    payment_id = models.CharField(max_length=100, null=True, blank=True) # ID de Mercado Pago
+    payment_id = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
         return f"Pedido #{self.id} - {self.estado}"
 
 class ItemPedido(models.Model):
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='items')
-    variante = models.ForeignKey(Variante, on_delete=models.PROTECT) # Evita borrar variantes vendidas
+    variante = models.ForeignKey(Variante, on_delete=models.PROTECT)
     cantidad = models.PositiveIntegerField()
     precio_historico = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
         return f"{self.cantidad} x {self.variante.producto.nombre} (Pedido {self.pedido.id})"
+
+# --- NUEVO: PERFIL DE USUARIO ---
+class PerfilUsuario(models.Model):
+    usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
+    telefono = models.CharField(max_length=50, null=True, blank=True)
+    direccion = models.CharField(max_length=255, null=True, blank=True)
+
+    def __str__(self):
+        return f"Perfil de {self.usuario.username}"
+
+# Esto crea un Perfil en blanco automáticamente cada vez que se registra un User nuevo en Django
+@receiver(post_save, sender=User)
+def crear_perfil_usuario(sender, instance, created, **kwargs):
+    if created:
+        PerfilUsuario.objects.create(usuario=instance)

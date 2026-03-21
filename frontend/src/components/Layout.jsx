@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, X } from 'lucide-react';
+import { ShoppingCart, Search, Menu, X, User } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 // Formateador de moneda estilo argentino
@@ -23,7 +23,7 @@ export default function Layout({ children }) {
     setIsLoading(true);
     try {
       const items = cart.map(item => ({
-        id: item.variante.id, // ¡Importante! Enviamos el ID de la variante a Django
+        id: item.variante.id,
         title: `${item.producto.nombre} - ${item.variante.color} ${item.variante.talle}`,
         quantity: item.cantidad,
         unit_price: item.variante.precio_base
@@ -72,6 +72,12 @@ export default function Layout({ children }) {
             <button className="hover:text-black transition-colors hidden sm:block">
               <Search size={20} />
             </button>
+            
+            {/* NUEVO: Botón de Perfil */}
+            <Link to="/perfil" className="hover:text-black transition-colors hidden sm:block">
+              <User size={22} />
+            </Link>
+
             <button 
               onClick={() => setIsCartOpen(true)}
               className="relative hover:text-black transition-colors flex items-center gap-2"
@@ -90,7 +96,7 @@ export default function Layout({ children }) {
         </div>
       </header>
 
-      {/* CONTENIDO PRINCIPAL (Acá se inyectan las páginas) */}
+      {/* CONTENIDO PRINCIPAL */}
       <main className="flex-grow pt-20">
         {children}
       </main>
