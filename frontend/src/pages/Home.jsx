@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Truck, ShieldCheck, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import FeaturedProducts from '../components/FeaturedProducts'; // NUEVO IMPORT
 
 export default function Home() {
   return (
@@ -57,6 +58,10 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* NUEVO: PRODUCTOS DESTACADOS */}
+      <FeaturedProducts />
+
     </div>
   );
 }

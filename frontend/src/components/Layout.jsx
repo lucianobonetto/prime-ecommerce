@@ -63,12 +63,48 @@ export default function Layout({ children }) {
           </div>
         </div>
       </header>
+{/* NUEVO: MENÚ MÓVIL DESPLEGABLE */}
+      <div 
+        className={`fixed top-20 left-0 w-full bg-white/95 backdrop-blur-md border-b border-gray-100 z-30 shadow-xl overflow-hidden transition-all duration-300 ease-in-out md:hidden flex flex-col ${
+          isMobileMenuOpen ? 'max-h-96 opacity-100 py-6' : 'max-h-0 opacity-0 py-0'
+        }`}
+      >
+        <nav className="flex flex-col gap-6 px-6 text-sm font-black tracking-widest uppercase text-gray-800">
+          <Link 
+            to="/" 
+            onClick={() => setIsMobileMenuOpen(false)} 
+            className="hover:text-[#009EE3] transition-colors"
+          >
+            Inicio
+          </Link>
+          <Link 
+            to="/productos" 
+            onClick={() => setIsMobileMenuOpen(false)} 
+            className="hover:text-[#009EE3] transition-colors"
+          >
+            Catálogo
+          </Link>
+          
+          {/* Línea divisoria */}
+          <div className="w-full h-px bg-gray-100 my-2"></div>
+          
+          <Link 
+            to={isAuthenticated ? "/perfil" : "/auth"} 
+            onClick={() => setIsMobileMenuOpen(false)} 
+            className="flex items-center gap-3 text-gray-500 hover:text-black transition-colors"
+          >
+            <User size={20} />
+            {isAuthenticated ? 'Mi Perfil' : 'Iniciar Sesión'}
+          </Link>
+        </nav>
+      </div>
 
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-grow pt-20">
         {children}
-      </main>
+      </main>     
 
+     
       {/* FOOTER */}
       <footer className="bg-black text-white py-12 px-6 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
