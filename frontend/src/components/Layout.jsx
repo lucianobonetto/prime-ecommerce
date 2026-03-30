@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, X, User } from 'lucide-react';
-import { useCart } from '../context/CartContext';
+import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp } from 'lucide-react';import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext'; // NUEVO IMPORT
 
 const formatPrice = (price) => {
@@ -14,55 +14,95 @@ const formatPrice = (price) => {
 
 export default function Layout({ children }) {
   const { cart, removeFromCart, cartCount, cartTotal } = useCart(); 
-  const { isAuthenticated } = useAuth(); // NUEVO: Saber si está logueado
+  const { isAuthenticated } = useAuth();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // NUEVO: Lógica del envío gratis
+  const FREE_SHIPPING_THRESHOLD = 50000; // Puse 50.000, pero cambialo al valor que quieras
+  const progressPercentage = Math.min((cartTotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
+  const amountMissing = FREE_SHIPPING_THRESHOLD - cartTotal;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-[#111111] font-sans selection:bg-black selection:text-white relative">
       
-      {/* NAVBAR */}
-      <header className="fixed top-0 w-full bg-white/90 backdrop-blur-md border-b border-gray-200 z-40">
+     {/* NAVBAR ANIMADA Y PREMIUM */}
+      <motion.header 
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        className="fixed top-0 w-full bg-white/80 backdrop-blur-lg border-b border-gray-100 z-40 shadow-[0_4px_30px_rgba(0,0,0,0.03)]"
+      >
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link to="/" className="text-2xl font-black tracking-tighter uppercase flex items-center gap-2">
-            <div className="w-8 h-8 bg-black text-white rounded-md flex items-center justify-center">
-              <ShoppingCart size={16} strokeWidth={3} />
-            </div>
-            Prime<span className="text-gray-400">.</span>
+          
+          {/* LOGO ANIMADO */}
+          <Link to="/" className="group text-2xl font-black tracking-tighter uppercase flex items-center gap-2">
+            <motion.div 
+              whileHover={{ rotate: -10, scale: 1.05 }}
+              transition={{ type: "spring", stiffness: 300 }}
+              className="w-9 h-9 bg-black text-white rounded-xl flex items-center justify-center shadow-md group-hover:bg-[#009EE3] transition-colors duration-300"
+            >
+              <ShoppingCart size={18} strokeWidth={2.5} />
+            </motion.div>
+            <span className="group-hover:text-[#009EE3] transition-colors duration-300">
+              Prime<span className="text-gray-300 group-hover:text-black">.</span>
+            </span>
           </Link>
 
-          <nav className="hidden md:flex gap-8 text-sm font-bold tracking-widest uppercase text-gray-500">
-            <Link to="/" className="hover:text-black transition-colors">Inicio</Link>
-            <Link to="/productos" className="hover:text-black transition-colors">Catálogo</Link>
+          {/* LINKS CON SUBRAYADO MÁGICO */}
+          <nav className="hidden md:flex gap-10 text-xs font-black tracking-[0.2em] uppercase text-gray-500">
+            <Link to="/" className="relative group hover:text-black transition-colors py-2">
+              INICIO
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#009EE3] transition-all duration-300 ease-out group-hover:w-full"></span>
+            </Link>
+            <Link to="/productos" className="relative group hover:text-black transition-colors py-2">
+              CATÁLOGO
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#009EE3] transition-all duration-300 ease-out group-hover:w-full"></span>
+            </Link>
           </nav>
 
-          <div className="flex items-center gap-5 text-gray-800">
-            <button className="hover:text-black transition-colors hidden sm:block">
-              <Search size={20} />
-            </button>
+          {/* ICONOS INTERACTIVOS */}
+          <div className="flex items-center gap-6 text-gray-700">
+            <motion.button whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="hover:text-[#009EE3] transition-colors hidden sm:block">
+              <Search size={22} strokeWidth={2} />
+            </motion.button>
             
-            {/* NUEVO: Redirección inteligente */}
-            <Link to={isAuthenticated ? "/perfil" : "/auth"} className="hover:text-black transition-colors hidden sm:block">
-              <User size={22} />
+            <Link to={isAuthenticated ? "/perfil" : "/auth"} className="hidden sm:block">
+              <motion.div whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="hover:text-[#009EE3] transition-colors">
+                <User size={24} strokeWidth={2} />
+              </motion.div>
             </Link>
 
-            <button 
+            {/* BOTÓN DE CARRITO CON BADGE QUE SALTA */}
+            <motion.button 
+              whileHover={{ scale: 1.1, y: -2 }} 
+              whileTap={{ scale: 0.9 }}
               onClick={() => setIsCartOpen(true)}
-              className="relative hover:text-black transition-colors flex items-center gap-2"
+              className="relative hover:text-[#009EE3] transition-colors flex items-center gap-2"
             >
-              <ShoppingCart size={22} />
+              <ShoppingCart size={24} strokeWidth={2} />
+              
+              {/* Esta key={cartCount} es el truco para que la animación se dispare cada vez que cambia el número */}
               {cartCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md">
+                <motion.span 
+                  key={cartCount} 
+                  initial={{ scale: 0, rotate: -45 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 15 }}
+                  className="absolute -top-2.5 -right-2.5 bg-[#009EE3] text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full shadow-lg border-2 border-white"
+                >
                   {cartCount}
-                </span>
+                </motion.span>
               )}
-            </button>
-            <button className="md:hidden" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </motion.button>
+
+            {/* BOTÓN HAMBURGUESA PARA CELULARES */}
+            <button className="md:hidden hover:text-[#009EE3] transition-colors" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+              {isMobileMenuOpen ? <X size={26} /> : <Menu size={26} />}
             </button>
           </div>
         </div>
-      </header>
+      </motion.header>
 {/* NUEVO: MENÚ MÓVIL DESPLEGABLE */}
       <div 
         className={`fixed top-20 left-0 w-full bg-white/95 backdrop-blur-md border-b border-gray-100 z-30 shadow-xl overflow-hidden transition-all duration-300 ease-in-out md:hidden flex flex-col ${
@@ -105,15 +145,83 @@ export default function Layout({ children }) {
       </main>     
 
      
-      {/* FOOTER */}
-      <footer className="bg-black text-white py-12 px-6 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="text-2xl font-black tracking-tighter uppercase flex items-center gap-2">
-            Prime Logic LT<span className="text-gray-600">.</span>
+      {/* FOOTER NUEVO */}
+      <footer className="bg-black text-white pt-16 pb-8 px-6 mt-auto">
+        <div className="max-w-7xl mx-auto">
+          {/* SECCIÓN SUPERIOR: 4 Columnas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
+            
+            {/* Columna 1: Marca y Redes */}
+            <div className="flex flex-col gap-4">
+              <div className="text-2xl font-black tracking-tighter uppercase flex items-center gap-2 mb-2">
+                Prime Logic LT<span className="text-[#009EE3]">.</span>
+              </div>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                Elevando tu día a día con tecnología premium. Diseñado para quienes buscan excelencia, rendimiento y estilo.
+              </p>
+              <div className="flex gap-4 mt-2">
+                <a href="#" className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center hover:bg-[#009EE3] transition-colors"><Instagram size={18} /></a>
+                <a href="#" className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center hover:bg-[#009EE3] transition-colors"><Facebook size={18} /></a>
+                <a href="#" className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center hover:bg-[#009EE3] transition-colors"><Twitter size={18} /></a>
+              </div>
+            </div>
+
+            {/* Columna 2: Navegación */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-lg font-bold uppercase tracking-widest mb-2">Navegación</h4>
+              <Link to="/" className="text-gray-400 hover:text-white transition-colors text-sm">Inicio</Link>
+              <Link to="/productos" className="text-gray-400 hover:text-white transition-colors text-sm">Catálogo</Link>
+              <Link to={isAuthenticated ? "/perfil" : "/auth"} className="text-gray-400 hover:text-white transition-colors text-sm">Mi Perfil</Link>
+            </div>
+
+            {/* Columna 3: Contacto */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-lg font-bold uppercase tracking-widest mb-2">Contacto</h4>
+              <div className="flex items-center gap-3 text-gray-400 text-sm hover:text-white transition-colors cursor-pointer">
+                <MapPin size={16} className="text-[#009EE3]" />
+                Godoy Cruz, Mendoza
+              </div>
+              <div className="flex items-center gap-3 text-gray-400 text-sm hover:text-white transition-colors cursor-pointer">
+                <Phone size={16} className="text-[#009EE3]" />
+                +54 9 261 123 4567
+              </div>
+              <div className="flex items-center gap-3 text-gray-400 text-sm hover:text-white transition-colors cursor-pointer">
+                <Mail size={16} className="text-[#009EE3]" />
+                hola@primelogic.com.ar
+              </div>
+            </div>
+
+            {/* Columna 4: Newsletter */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-lg font-bold uppercase tracking-widest mb-2">Newsletter</h4>
+              <p className="text-gray-400 text-sm">
+                Suscribite para recibir ofertas exclusivas y novedades antes que nadie.
+              </p>
+              <div className="flex mt-2">
+                <input 
+                  type="email" 
+                  placeholder="Tu email..." 
+                  className="bg-gray-900 text-white px-4 py-3 rounded-l-xl outline-none focus:ring-1 focus:ring-[#009EE3] w-full text-sm placeholder-gray-600 border border-gray-800 focus:border-[#009EE3] transition-all"
+                />
+                <button className="bg-[#009EE3] hover:bg-blue-600 px-4 py-3 rounded-r-xl font-bold transition-colors flex items-center justify-center">
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+
           </div>
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-widest text-center md:text-left">
-            © 2026 Prime Logic LT. Todos los derechos reservados.
-          </p>
+
+          {/* SECCIÓN INFERIOR: Copyright & Pagos */}
+          <div className="pt-8 border-t border-gray-900 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-gray-500 text-xs font-bold uppercase tracking-widest text-center md:text-left">
+              © 2026 Prime Logic LT. Todos los derechos reservados.
+            </p>
+            <div className="flex gap-2 items-center">
+              <div className="px-3 py-1.5 bg-gray-900 rounded-md text-[10px] font-black tracking-wider text-gray-400 border border-gray-800">VISA</div>
+              <div className="px-3 py-1.5 bg-gray-900 rounded-md text-[10px] font-black tracking-wider text-gray-400 border border-gray-800">MASTERCARD</div>
+              <div className="px-3 py-1.5 bg-gray-900 rounded-md text-[10px] font-black tracking-wider text-[#009EE3] border border-gray-800">MERCADO PAGO</div>
+            </div>
+          </div>
         </div>
       </footer>
 
@@ -130,6 +238,58 @@ export default function Layout({ children }) {
             <X size={24} />
           </button>
         </div>
+        {/* NUEVO: BARRA DE ENVÍO GRATIS - VERSIÓN ANIMADA Y CREATIVA */}
+        {cart.length > 0 && (
+          <div className="bg-gray-50 px-6 py-5 border-b border-gray-100 relative overflow-hidden">
+            {/* Fondo decorativo sutil */}
+            <div className="absolute inset-0 opacity-5">
+              <Star size={100} className="absolute -top-10 -left-10 text-blue-100" />
+              <Star size={80} className="absolute -bottom-10 -right-10 text-blue-100" />
+            </div>
+
+            {cartTotal >= FREE_SHIPPING_THRESHOLD ? (
+              // ESTADO: ENVÍO GRATIS LOGRADO (CON ANIMACIÓN)
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                className="relative z-10 text-center flex flex-col items-center gap-2"
+              >
+                <motion.div
+                  animate={{ rotate: [0, 15, -15, 0], scale: [1, 1.1, 1.1, 1] }}
+                  transition={{ duration: 0.8, ease: "easeInOut", repeat: Infinity, repeatType: "reverse", repeatDelay: 1 }}
+                >
+                  <Gift size={32} className="text-[#009EE3]" />
+                </motion.div>
+                <p className="text-xs font-black text-gray-900 flex flex-col items-center justify-center gap-1 uppercase tracking-widest">
+                  <span className="text-[#009EE3]">¡Felicidades, Luciano!</span>
+                  <span className="text-xl font-extrabold text-black">Envío Gratis</span>
+                  <span className="text-[10px] font-medium text-gray-500 normal-case">para toda tu tecnología premium.</span>
+                </p>
+              </motion.div>
+            ) : (
+              // ESTADO: PROGRESO HACIA EL ENVÍO GRATIS
+              <div className="relative z-10 flex flex-col gap-4">
+                <div className="flex flex-col items-center gap-1.5">
+                  <TrendingUp size={16} className="text-[#009EE3]" />
+                  <p className="text-[10px] font-bold text-gray-600 text-center uppercase tracking-widest">
+                    Estás a <span className="text-black text-xs font-black">{formatPrice(amountMissing)}</span> de desbloquear
+                  </p>
+                  <p className="text-xl font-extrabold text-black uppercase tracking-tight">
+                    Envío Gratis
+                  </p>
+                </div>
+                <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden shadow-inner border border-gray-100">
+                  <div 
+                    className="bg-green-500 h-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(34,197,94,0.3)]"
+                    style={{ width: `${progressPercentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </div>
+        
+        )}
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
           {cart.length === 0 ? (
