@@ -2,32 +2,40 @@ import mercadopago
 from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS # NUEVOS IMPORT
 from rest_framework.response import Response
 import re
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
 from django.db import transaction
 from django.db.models import F
 from django.shortcuts import redirect
 
-# Importamos con los nombres EXACTOS de tu models.py
 from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario, Direccion
 from .serializers import CategorySerializer, ProductSerializer
 
-# --- VISTAS DEL CATÁLOGO ---
-class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+# --- NUEVO: Permiso personalizado para el Catálogo ---
+class IsAdminOrReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        # Si es un método seguro (GET, HEAD, OPTIONS), dejamos pasar a cualquiera
+        if request.method in SAFE_METHODS:
+            return True
+        # Si es POST, PUT, DELETE, solo dejamos pasar si es staff (Admin)
+        return bool(request.user and request.user.is_staff)
+
+# --- VISTAS DEL CATÁLOGO (ACTUALIZADAS PARA ABM) ---
+# Cambiamos ReadOnlyModelViewSet a ModelViewSet y aplicamos el permiso
+class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Categoria.objects.all()
     serializer_class = CategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
 
-class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+class ProductViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all() 
     serializer_class = ProductSerializer
+    permission_classes = [IsAdminOrReadOnly]
 
-# --- NUEVAS VISTAS DE PERFIL Y DIRECCIONES (Protegidas) ---
+# --- VISTAS DE PERFIL Y DIRECCIONES ---
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def mi_perfil(request):
@@ -39,7 +47,8 @@ def mi_perfil(request):
             "nombre": user.first_name,
             "apellido": user.last_name,
             "email": user.email,
-            "telefono": perfil.telefono
+            "telefono": perfil.telefono,
+            "is_admin": user.is_staff # NUEVO: Le avisamos a React si es administrador
         }
         return Response(data)
 
@@ -104,11 +113,9 @@ def direccion_detalle(request, pk):
 def mis_pedidos(request):
     pedidos = Pedido.objects.filter(usuario=request.user).order_by('-fecha')
     data = []
-    
     for pedido in pedidos:
         items = ItemPedido.objects.filter(pedido=pedido)
         resumen = ", ".join([f"{item.variante.producto.nombre} ({item.variante.talle}) x{item.cantidad}" for item in items])
-        
         data.append({
             "id": pedido.id,
             "fecha": pedido.fecha,
@@ -117,10 +124,77 @@ def mis_pedidos(request):
             "items_resumen": resumen if resumen else "Sin items detallados",
             "metodo_envio": pedido.metodo_envio
         })
-        
     return Response(data)
 
-# --- VISTAS DE PAGO ---
+
+# =========================================================
+# --- VISTAS EXCLUSIVAS DEL PANEL DE ADMINISTRACIÓN ---
+# =========================================================
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser]) # Solo staff puede ver esto
+def admin_pedidos(request):
+    pedidos = Pedido.objects.all().order_by('-fecha')
+    data = []
+    for pedido in pedidos:
+        items = ItemPedido.objects.filter(pedido=pedido)
+        resumen = ", ".join([f"{item.variante.producto.nombre} ({item.variante.talle}) x{item.cantidad}" for item in items])
+        
+        # Armamos la dirección de forma segura
+        direccion_envio = "Retiro en sucursal"
+        if pedido.metodo_envio == 'domicilio' and pedido.envio_calle:
+            direccion_envio = f"{pedido.envio_calle} {pedido.envio_numero}, {pedido.envio_ciudad}"
+
+        data.append({
+            "id": pedido.id,
+            "usuario": pedido.usuario.email if pedido.usuario else "Invitado",
+            "fecha": pedido.fecha,
+            "total_final": pedido.total_final,
+            "estado": pedido.estado,
+            "metodo_envio": pedido.metodo_envio,
+            "direccion": direccion_envio,
+            "items_resumen": resumen,
+        })
+    return Response(data)
+
+@api_view(['PUT'])
+@permission_classes([IsAdminUser])
+def admin_actualizar_pedido(request, pk):
+    try:
+        pedido = Pedido.objects.get(id=pk)
+        nuevo_estado = request.data.get('estado')
+        if nuevo_estado in dict(Pedido.ESTADO_CHOICES).keys():
+            pedido.estado = nuevo_estado
+            pedido.save()
+            return Response({"mensaje": f"Pedido #{pedido.id} actualizado a '{nuevo_estado}'."})
+        return Response({"error": "Estado no válido."}, status=status.HTTP_400_BAD_REQUEST)
+    except Pedido.DoesNotExist:
+        return Response({"error": "Pedido no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_usuarios(request):
+    usuarios = User.objects.all().order_by('-date_joined')
+    data = []
+    for u in usuarios:
+        perfil = PerfilUsuario.objects.filter(usuario=u).first()
+        direcciones = Direccion.objects.filter(usuario=u)
+        dirs_list = [f"{d.calle} {d.numero}, {d.ciudad} (CP: {d.codigo_postal})" for d in direcciones]
+        
+        data.append({
+            "id": u.id,
+            "email": u.email,
+            "nombre": f"{u.first_name} {u.last_name}".strip(),
+            "telefono": perfil.telefono if perfil else "Sin registrar",
+            "is_admin": u.is_staff,
+            "direcciones_guardadas": dirs_list
+        })
+    return Response(data)
+
+
+# =========================================================
+# --- VISTAS DE PAGO (MANTENIDAS EXACTAMENTE IGUAL) ---
+# =========================================================
 @api_view(['POST'])
 def create_preference(request):
     try:
@@ -133,7 +207,6 @@ def create_preference(request):
         items_for_mp = []
         
         for item in cart_items:
-            # Detectamos si el frontend está enviando el cobro del envío
             if item.get('id') == "ENVIO-01":
                 total_price_seguro += float(item['unit_price'])
                 items_for_mp.append(item)
@@ -163,7 +236,6 @@ def create_preference(request):
 
         usuario_pedido = request.user if request.user.is_authenticated else None
 
-        # CREAMOS EL PEDIDO Y ESTAMPAMOS EL SNAPSHOT DEL ENVÍO
         pedido = Pedido.objects.create(
             usuario=usuario_pedido,
             total_final=total_price_seguro,
@@ -179,7 +251,7 @@ def create_preference(request):
 
         for item in cart_items:
             if item.get('id') == "ENVIO-01":
-                continue # No guardamos el envío como un producto del catálogo
+                continue 
             variante = Variante.objects.get(id=item.get('id'))
             ItemPedido.objects.create(
                 pedido=pedido,
@@ -210,7 +282,6 @@ def create_preference(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
 @api_view(['POST'])
 def mercadopago_webhook(request):
@@ -255,57 +326,35 @@ def mercadopago_webhook(request):
 def registro_usuario(request):
     data = request.data
     
-    # Extraemos los datos limpiando espacios en blanco y pasando el email a minúsculas
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
-    password_confirm = data.get('password_confirm', '') # Ahora pedimos confirmación
+    password_confirm = data.get('password_confirm', '') 
     nombre = data.get('nombre', '').strip()
     apellido = data.get('apellido', '').strip()
 
     try:
-        # 1. Validación de Gmail exclusivo
         if not email.endswith('@gmail.com'):
-            return Response(
-                {'error': 'Por motivos de seguridad y notificaciones, solo aceptamos cuentas de @gmail.com.'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Por motivos de seguridad y notificaciones, solo aceptamos cuentas de @gmail.com.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Validación de usuario duplicado
         if User.objects.filter(email=email).exists():
-            return Response(
-                {'error': 'Este correo ya se encuentra registrado en nuestro sistema.'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Este correo ya se encuentra registrado en nuestro sistema.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. Validación de Contraseñas Coincidentes
         if password != password_confirm:
-            return Response(
-                {'error': 'Las contraseñas no coinciden. Por favor, intentalo de nuevo.'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Las contraseñas no coinciden. Por favor, intentalo de nuevo.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 4. Validación de Seguridad de Contraseña (Al menos 8 caracteres, letras y números)
         if len(password) < 8:
-            return Response(
-                {'error': 'La contraseña debe tener al menos 8 caracteres.'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'La contraseña debe tener al menos 8 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
             
         if not re.search(r'[A-Za-z]', password) or not re.search(r'[0-9]', password):
-            return Response(
-                {'error': 'La contraseña debe ser alfanumérica (contener al menos una letra y un número).'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'La contraseña debe ser alfanumérica (contener al menos una letra y un número).'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 5. Creación del Usuario Seguro
         nuevo_usuario = User.objects.create(
-            username=email, # Usamos el email como identificador único interno
+            username=email,
             email=email,
-            password=make_password(password), # ¡Fundamental! Encriptamos antes de guardar
+            password=make_password(password),
             first_name=nombre,
             last_name=apellido
         )
-        
         return Response({'mensaje': 'Cuenta creada con éxito. Ya podés iniciar sesión.'}, status=status.HTTP_201_CREATED)
         
     except Exception as e:
@@ -313,5 +362,4 @@ def registro_usuario(request):
     
 @api_view(['GET'])
 def mercadopago_redirect(request):
-    # Mercado Pago nos manda acá por tener HTTPS, y nosotros rebotamos al cliente a su React local
     return redirect('http://localhost:5173/success')

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext'; // NUEVO IMPORT
+import { useAuth } from '../context/AuthContext'; // Saber si está logueado
 import { X, Minus, Plus, Truck, Store, Tag, MapPin, BookUser } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom'; // NUEVO useNavigate
+import { Link, useNavigate } from 'react-router-dom'; // Para redirigir al login
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(price);
@@ -10,8 +10,8 @@ const formatPrice = (price) => {
 
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, cartCount, cartTotal } = useCart();
-  const { isAuthenticated } = useAuth(); // NUEVO: Saber si está logueado
-  const navigate = useNavigate(); // NUEVO: Para redirigirlo al login
+  const { isAuthenticated } = useAuth(); // NUEVO: Evaluamos la sesión
+  const navigate = useNavigate(); // NUEVO: Motor de redirección
   const [deliveryMethod, setDeliveryMethod] = useState('sucursal');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -31,21 +31,24 @@ export default function CartPage() {
   const finalTotal = cartTotal + shippingCost;
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      fetch('http://127.0.0.1:8000/api/mis-direcciones/', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        if (data.length > 0) {
-          setSavedAddresses(data);
-          setSelectedAddressId(data[0].id);
-        }
-      })
-      .catch(err => console.log("Modo invitado: No se cargaron direcciones previas."));
+    // Solo busca direcciones si el usuario está logueado
+    if (isAuthenticated) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        fetch('http://127.0.0.1:8000/api/mis-direcciones/', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+          if (data.length > 0) {
+            setSavedAddresses(data);
+            setSelectedAddressId(data[0].id);
+          }
+        })
+        .catch(err => console.log("Error cargando direcciones previas."));
+      }
     }
-  }, []);
+  }, [isAuthenticated]); // Dependencia clave
 
   const getActiveShippingDetails = () => {
     if (selectedAddressId === 'new') return shippingDetails;
@@ -103,12 +106,12 @@ export default function CartPage() {
         window.location.href = data.init_point;
       } else {
         alert('Error al generar el pago: ' + (data.error || 'Desconocido'));
+        setIsLoading(false); // Liberamos carga si hay error
       }
     } catch (error) {
       console.error('Error:', error);
       alert('Error al conectar con el servidor de pagos.');
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Liberamos carga si hay error
     }
   };
 
@@ -128,7 +131,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="pt-28 pb-20 max-w-7xl mx-auto px-6 min-h-screen">
+    <div className="pt-28 pb-20 max-w-7xl mx-auto px-6 min-h-screen relative">
       <div className="mb-8 border-b border-gray-200 pb-4">
         <h1 className="text-3xl md:text-4xl font-black tracking-tight text-black">
           Carrito de productos
@@ -210,7 +213,7 @@ export default function CartPage() {
                 {deliveryMethod === 'domicilio' && (
                   <div className="px-6 pb-6 pt-2 border-t border-gray-200 mt-2">
                     
-                    {savedAddresses.length > 0 && (
+                    {isAuthenticated && savedAddresses.length > 0 && (
                       <div className="mb-6 bg-white p-4 rounded-xl border border-gray-200">
                         <h4 className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-3">
                           <BookUser size={16} /> Mis Direcciones
@@ -305,7 +308,7 @@ export default function CartPage() {
               <Tag size={16} /> Agregar cupón de descuento
             </button>
 
-            {/* NUEVO: Lógica del Botón de Pago vs Iniciar Sesión */}
+            {/* LOGICA DEL BOTON: Pagar vs Iniciar Sesión */}
             {isAuthenticated ? (
               <button 
                 onClick={handlePayment}
@@ -323,30 +326,30 @@ export default function CartPage() {
                 onClick={() => navigate('/auth')}
                 className="w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm transition-all shadow-md flex justify-center items-center gap-2 bg-black text-white hover:bg-gray-800 active:scale-95"
               >
-                Iniciar sesión para pagar
+                Inicia sesión para pagar
               </button>
             )}
 
             <p className="text-center text-[10px] text-gray-400 mt-4 font-bold uppercase tracking-widest">
               Pago 100% seguro y encriptado
             </p>
-         </div>
-          </aside>
-        </div>
-
-        {/* NUEVO: VENTANITA EMERGENTE (MODAL) DE CARGA */}
-        {isLoading && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all">
-            <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-pulse">
-              <div className="w-16 h-16 border-4 border-[#009EE3] border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-              <h3 className="text-2xl font-black text-black mb-2 tracking-tight">Preparando tu pago</h3>
-              <p className="text-gray-500 font-medium text-sm">
-                Serás redirigido a Mercado Pago de forma segura en unos segundos...
-              </p>
-            </div>
           </div>
-        )}
-
+        </aside>
       </div>
-    );
+
+      {/* MODAL DE CARGA CORREGIDO */}
+      {isLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-pulse">
+            <div className="w-16 h-16 border-4 border-[#009EE3] border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+            <h3 className="text-2xl font-black text-black mb-2 tracking-tight">Preparando tu pago</h3>
+            <p className="text-gray-500 font-medium text-sm">
+              Serás redirigido a Mercado Pago de forma segura en unos segundos...
+            </p>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
 }
