@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp } from 'lucide-react';import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext'; // NUEVO IMPORT
+import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp, Shield } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
@@ -14,7 +15,7 @@ const formatPrice = (price) => {
 
 export default function Layout({ children }) {
   const { cart, removeFromCart, cartCount, cartTotal } = useCart(); 
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -61,8 +62,22 @@ export default function Layout({ children }) {
             </Link>
           </nav>
 
-          {/* ICONOS INTERACTIVOS */}
+ {/* ICONOS INTERACTIVOS */}
           <div className="flex items-center gap-6 text-gray-700">
+            
+            {/* NUEVO: BOTÓN PANEL ADMIN (Oculto para mortales, visible para admins) */}
+            {isAdmin && (
+              <Link to="/admin" className="hidden sm:block group relative">
+                <motion.div whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="text-gray-400 hover:text-[#009EE3] transition-colors">
+                  <Shield size={22} strokeWidth={2.5} />
+                </motion.div>
+                {/* Tooltip que aparece al pasar el mouse */}
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] font-bold bg-black text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  Admin
+                </span>
+              </Link>
+            )}
+
             <motion.button whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="hover:text-[#009EE3] transition-colors hidden sm:block">
               <Search size={22} strokeWidth={2} />
             </motion.button>
