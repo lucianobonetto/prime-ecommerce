@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { motion } from "framer-motion";
-import { ShoppingCart, Star } from "lucide-react";
+import { ShoppingCart, Star, Heart } from "lucide-react";
+import { useWishlist } from '../context/WishlistContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
@@ -20,28 +21,54 @@ export default function ProductCard({ product }) {
 
   // Verificamos el stock de la variante seleccionada
   const outOfStock = selectedVariant ? selectedVariant.stock_disponible <= 0 : true;
+  const { toggleFavorite, isFavorite } = useWishlist();
+  const favorited = isFavorite(product.id);
 
   return (
-    <motion.div 
+ <motion.div 
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5 }}
       className="group flex flex-col h-full bg-white rounded-3xl p-4 border border-transparent hover:border-gray-100 hover:shadow-2xl hover:shadow-gray-200/50 transition-all"
     >
-      {/* Imagen (Clickeable hacia el Detalle) */}
-      <Link to={`/productos/${product.id}`} className="relative aspect-square mb-4 overflow-hidden bg-gray-50 rounded-2xl block">
-        <img 
-          src={product.image || 'https://via.placeholder.com/800'} 
-          alt={product.nombre} 
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out mix-blend-multiply"
-        />
-        {outOfStock && (
-          <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center">
-            <span className="bg-black text-white px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest">Agotado</span>
-          </div>
-        )}
-      </Link>
+      
+      {/* Contenedor relativo de la Imagen y el Botón */}
+      <div className="relative aspect-square mb-4 overflow-hidden bg-gray-50 rounded-2xl block">
+        
+        {/* BOTÓN DE FAVORITO (Flota sobre la imagen) */}
+        <button 
+          onClick={(e) => {
+            e.preventDefault(); // Evita que al hacer clic en el corazón te lleve al detalle del producto
+            toggleFavorite(product);
+          }}
+          className="absolute top-4 right-4 z-20 p-2.5 bg-white/80 backdrop-blur-md rounded-full shadow-sm hover:bg-white transition-colors"
+        >
+          <motion.div
+            animate={{ scale: favorited ? [1, 1.3, 1] : 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Heart 
+              size={20} 
+              className={favorited ? "fill-red-500 text-red-500" : "text-gray-400"} 
+            />
+          </motion.div>
+        </button>
+
+        {/* Imagen (Clickeable hacia el Detalle) */}
+        <Link to={`/productos/${product.id}`} className="block w-full h-full">
+          <img 
+            src={product.image || 'https://via.placeholder.com/800'} 
+            alt={product.nombre} 
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out mix-blend-multiply"
+          />
+          {outOfStock && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+              <span className="bg-black text-white px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest">Agotado</span>
+            </div>
+          )}
+        </Link>
+      </div>
 
       {/* Info y Controles */}
       <div className="flex flex-col flex-grow px-2">

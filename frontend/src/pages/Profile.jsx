@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Package, LogOut, Edit3, CheckCircle, Clock, XCircle, MapPin, Plus, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom'; // NUEVO IMPORT
-import { useAuth } from '../context/AuthContext'; // NUEVO IMPORT
+import { User, Package, LogOut, Edit3, CheckCircle, Clock, XCircle, MapPin, Plus, Trash2, Heart } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useWishlist } from '../context/WishlistContext';
+import ProductCard from '../components/ProductCard'; // NUEVO IMPORT PARA LAS TARJETAS
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(price);
@@ -9,8 +11,9 @@ const formatPrice = (price) => {
 
 export default function Profile() {
   const [activeTab, setActiveTab] = useState('pedidos');
-  const { isAuthenticated, logout } = useAuth(); // NUEVO: Contexto de auth
-  const navigate = useNavigate(); // NUEVO: Para redirigir
+  const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+  const { favorites } = useWishlist();
   
   // Estados para Perfil
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -32,7 +35,6 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    // Si no está logueado, lo mandamos al login al instante
     if (!isAuthenticated) {
       navigate('/auth');
       return;
@@ -40,15 +42,12 @@ export default function Profile() {
 
     const token = localStorage.getItem('token');
     if (token) {
-      // 1. Traer Perfil
       fetch('http://127.0.0.1:8000/api/mi-perfil/', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => res.json()).then(data => setUserProfile(data)).catch(() => {});
 
-      // 2. Traer Pedidos
       fetch('http://127.0.0.1:8000/api/mis-pedidos/', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => res.json()).then(data => setPedidos(data)).catch(() => {});
 
-      // 3. Traer Direcciones
       fetch('http://127.0.0.1:8000/api/mis-direcciones/', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => res.json()).then(data => setDirecciones(data)).catch(() => {});
     }
@@ -63,10 +62,9 @@ export default function Profile() {
     }
   };
 
-  // --- NUEVO: CERRAR SESIÓN ---
   const handleLogout = () => {
     logout();
-    navigate('/'); // Te devuelve a la pantalla de inicio
+    navigate('/');
   };
 
   const handleSaveProfile = async (e) => {
@@ -154,11 +152,17 @@ export default function Profile() {
             <button onClick={() => setActiveTab('direcciones')} className={`flex items-center gap-3 p-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'direcciones' ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
               <MapPin size={18} /> Mis Direcciones
             </button>
+            
+            {/* NUEVA PESTAÑA: FAVORITOS */}
+            <button onClick={() => setActiveTab('favoritos')} className={`flex items-center gap-3 p-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'favoritos' ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <Heart size={18} className={activeTab === 'favoritos' ? 'fill-white text-white' : ''} /> 
+              Mis Favoritos ({favorites.length})
+            </button>
+
             <button onClick={() => setActiveTab('perfil')} className={`flex items-center gap-3 p-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'perfil' ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
               <User size={18} /> Mi Perfil
             </button>
             
-            {/* NUEVO: Botón de Cerrar Sesión conectado */}
             <button onClick={handleLogout} className="flex items-center gap-3 p-4 rounded-2xl font-bold text-sm text-red-500 hover:bg-red-50 transition-all mt-4">
               <LogOut size={18} /> Cerrar Sesión
             </button>
@@ -264,6 +268,25 @@ export default function Profile() {
                     </div>
                   ))
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* NUEVA PESTAÑA: FAVORITOS */}
+        {activeTab === 'favoritos' && (
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+            <h2 className="text-2xl font-black mb-8 flex items-center gap-2"><Heart size={24}/> Mis Favoritos</h2>
+            {favorites.length === 0 ? (
+              <div className="text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
+                <Heart className="mx-auto text-gray-300 mb-4" size={48} />
+                <p className="text-gray-500 font-medium">Aún no tienes productos guardados.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {favorites.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
               </div>
             )}
           </div>
