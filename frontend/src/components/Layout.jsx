@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import WhatsAppButton from './WhatsAppButton';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
@@ -350,6 +352,7 @@ export default function Layout({ children }) {
           </Link>
         </div>
       </div>
+      <WhatsAppButton />
     </div>
   );
 }
