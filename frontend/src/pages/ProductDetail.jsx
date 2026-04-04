@@ -2,41 +2,60 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { ShoppingCart, ArrowLeft, ShieldCheck, Truck } from 'lucide-react';
+import ProductCard from '../components/ProductCard'; // NUEVO IMPORT PARA LAS TARJETAS RECOMENDADAS
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(price);
 };
 
 export default function ProductDetail() {
-  const { id } = useParams(); // Obtenemos el ID de la URL
+  const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
   
   const [product, setProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // NUEVO ESTADO: Para guardar los productos recomendados
+  const [relatedProducts, setRelatedProducts] = useState([]);
 
   useEffect(() => {
-    // Django ViewSet permite buscar por ID automáticamente agregando /id/ al final
+    setLoading(true);
+    
+    // TRUCO UX: Hacer scroll hacia arriba cuando entramos a un producto nuevo
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // 1. Buscamos el producto actual
     fetch(`http://127.0.0.1:8000/api/productos/${id}/`)
       .then(res => res.json())
       .then(data => {
         setProduct(data);
         if (data.variantes && data.variantes.length > 0) {
-          setSelectedVariant(data.variantes[0]); // Seleccionamos la primera variante por defecto
+          setSelectedVariant(data.variantes[0]);
         }
+        
+        // 2. Buscamos TODOS los productos para armar las recomendaciones
+        return fetch('http://127.0.0.1:8000/api/productos/');
+      })
+      .then(res => res.json())
+      .then(allProducts => {
+        // 3. Filtramos para no mostrar el producto que ya estamos viendo
+        const filtered = allProducts.filter(p => p.id !== parseInt(id));
+        
+        // Agarramos los primeros 4 para mostrar (podrías mezclar el array también si quisieras que sean aleatorios)
+        setRelatedProducts(filtered.slice(0, 4));
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
         setLoading(false);
       });
-  }, [id]);
+  }, [id]); // Al poner 'id' acá, si hacemos clic en una recomendación, se vuelve a ejecutar todo este bloque
 
   if (loading) return <div className="pt-32 text-center font-bold">Cargando producto...</div>;
   if (!product) return <div className="pt-32 text-center font-bold">Producto no encontrado</div>;
 
-  // Usamos el precio final de la variante si existe, sino el base del producto
   const displayPrice = selectedVariant?.precio_final || selectedVariant?.precio_base || 0;
 
   return (
@@ -45,6 +64,7 @@ export default function ProductDetail() {
         <ArrowLeft size={16} /> Volver
       </button>
 
+      {/* CONTENEDOR PRINCIPAL DEL PRODUCTO */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
         {/* Imagen del Producto */}
         <div className="bg-gray-100 rounded-3xl aspect-square overflow-hidden flex items-center justify-center">
@@ -133,6 +153,19 @@ export default function ProductDetail() {
           </div>
         </div>
       </div>
+
+      {/* NUEVA SECCIÓN: TAMBIÉN TE PUEDE INTERESAR */}
+      {relatedProducts.length > 0 && (
+        <div className="mt-24 pt-12 border-t border-gray-100">
+          <h2 className="text-3xl font-black mb-8 text-center md:text-left">También te puede interesar</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {relatedProducts.map(prod => (
+              <ProductCard key={prod.id} product={prod} />
+            ))}
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 }
