@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { toast } from 'sonner'; // <-- Importamos la magia de las notificaciones
 
 const CartContext = createContext();
 
@@ -15,29 +16,47 @@ export function CartProvider({ children }) {
   const addToCart = (producto, variante) => {
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.variante.id === variante.id);
+      
       if (existingItem) {
         if (existingItem.cantidad >= variante.stock_disponible) {
-          alert('No hay más stock disponible para esta variante.');
+          // Reemplazamos el viejo alert() por un error premium
+          toast.error('Sin stock suficiente', {
+            description: `Ya tenés todas las unidades disponibles de ${producto.nombre}.`
+          });
           return prevCart;
         }
+        
+        // Notificación de éxito al sumar uno más
+        toast.success('Carrito actualizado', {
+          description: `Sumaste otra unidad de ${producto.nombre}.`
+        });
+        
         return prevCart.map((item) =>
           item.variante.id === variante.id
             ? { ...item, cantidad: item.cantidad + 1 }
             : item
         );
       }
+      
+      // Notificación de éxito al agregar por primera vez
+      toast.success('¡Agregado al carrito!', {
+        description: producto.nombre
+      });
+      
       return [...prevCart, { producto, variante, cantidad: 1 }];
     });
   };
 
-  // NUEVA FUNCIÓN: Para el control de + y - en el carrito completo
   const updateQuantity = (varianteId, newQuantity) => {
-    if (newQuantity < 1) return; // No permitimos bajar de 1 (para eso está el botón eliminar)
+    if (newQuantity < 1) return;
     
     setCart((prevCart) => prevCart.map((item) => {
       if (item.variante.id === varianteId) {
         if (newQuantity > item.variante.stock_disponible) {
-          alert(`Solo quedan ${item.variante.stock_disponible} unidades disponibles.`);
+          // Reemplazamos el otro alert()
+          toast.warning('Límite de stock', {
+            description: `Solo quedan ${item.variante.stock_disponible} unidades disponibles.`
+          });
           return item;
         }
         return { ...item, cantidad: newQuantity };
@@ -47,7 +66,15 @@ export function CartProvider({ children }) {
   };
 
   const removeFromCart = (varianteId) => {
-    setCart((prevCart) => prevCart.filter((item) => item.variante.id !== varianteId));
+    setCart((prevCart) => {
+      const itemToRemove = prevCart.find(item => item.variante.id === varianteId);
+      if (itemToRemove) {
+        toast.info('Producto eliminado', {
+          description: 'Se quitó el artículo de tu carrito.'
+        });
+      }
+      return prevCart.filter((item) => item.variante.id !== varianteId);
+    });
   };
 
   const clearCart = () => {
@@ -62,7 +89,6 @@ export function CartProvider({ children }) {
     return total + (parseFloat(precio) * item.cantidad);
   }, 0);
 
-  // Agregamos updateQuantity al Provider
   return (
     <CartContext.Provider value={{ cart, addToCart, updateQuantity, removeFromCart, clearCart, cartCount, cartTotal }}>
       {children}

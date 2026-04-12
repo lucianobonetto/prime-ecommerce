@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp, Shield, Tag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { Toaster } from 'sonner';
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
@@ -38,6 +39,10 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-[#111111] font-sans selection:bg-black selection:text-white relative">
       
+      {/* NUEVO: El proyector de notificaciones */}
+      <Toaster position="top-right" richColors />
+    
+
      {/* NAVBAR ANIMADA Y PREMIUM */}
       <motion.header 
         initial={{ y: -100 }}
