@@ -11,8 +11,8 @@ from django.db import transaction
 from django.db.models import F
 from django.shortcuts import redirect
 
-from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario, Direccion
-from .serializers import CategorySerializer, ProductSerializer
+from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario, Direccion, Resena
+from .serializers import CategorySerializer, ProductSerializer, ResenaSerializer
 
 # --- NUEVO: Permiso personalizado para el Catálogo ---
 class IsAdminOrReadOnly(BasePermission):
@@ -363,3 +363,40 @@ def registro_usuario(request):
 @api_view(['GET'])
 def mercadopago_redirect(request):
     return redirect('http://localhost:5173/success')
+
+# =========================================================
+# --- NUEVO: VISTAS DE RESEÑAS / COMENTARIOS ---
+# =========================================================
+# from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated]) # <-- NUEVO: CANDADO DE SEGURIDAD
+def crear_resena(request, producto_id):
+    try:
+        producto = Producto.objects.get(id=producto_id)
+        
+        rating = request.data.get('rating', 5)
+        comentario = request.data.get('comentario', '')
+
+        if not comentario.strip():
+            return Response(
+                {"error": "El comentario no puede estar vacío."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Como exigimos estar logueados, request.user siempre va a existir
+        resena = Resena.objects.create(
+            producto=producto,
+            usuario=request.user,
+            rating=int(rating),
+            comentario=comentario
+        )
+
+        serializer = ResenaSerializer(resena)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    except Producto.DoesNotExist:
+        return Response(
+            {"error": "Producto no encontrado."}, 
+            status=status.HTTP_404_NOT_FOUND
+        )

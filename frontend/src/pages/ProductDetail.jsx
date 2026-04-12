@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext'; // <-- NUEVO DE COMENT
+import { Link } from 'react-router-dom'; // <-- NUEVO DE COMENT
 import { ShoppingCart, ArrowLeft, ShieldCheck, Truck, Star, MessageSquare } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 
@@ -19,12 +21,10 @@ export default function ProductDetail() {
   const [relatedProducts, setRelatedProducts] = useState([]);
 
   // --- NUEVO: ESTADOS PARA LAS RESEÑAS ---
+  const { isAuthenticated } = useAuth(); // <-- NUEVO: Para saber si está logueado
   const [ratingHover, setRatingHover] = useState(0);
   const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
-  const [reviews, setReviews] = useState([
-    { id: 1, autor: 'Juan Pérez', fecha: '12 Feb 2026', rating: 5, comentario: '¡Excelente producto! La calidad es increíble y el envío fue súper rápido. 100% recomendado.' },
-    { id: 2, autor: 'María Gómez', fecha: '28 Ene 2026', rating: 4, comentario: 'Me encantó el diseño. Le pongo 4 estrellas porque la caja del empaque llegó un poco doblada, pero el reloj está intacto.' }
-  ]);
+  const [reviews, setReviews] = useState([]); // <-- AHORA ARRANCA VACÍO
 
   useEffect(() => {
     setLoading(true);
@@ -32,8 +32,9 @@ export default function ProductDetail() {
 
     fetch(`http://127.0.0.1:8000/api/productos/${id}/`)
       .then(res => res.json())
-      .then(data => {
+    .then(data => {
         setProduct(data);
+        setReviews(data.resenas || []); // <-- ESTO FALTABA: Guardar las reseñas del backend
         if (data.variantes && data.variantes.length > 0) {
           setSelectedVariant(data.variantes[0]);
         }
@@ -52,20 +53,34 @@ export default function ProductDetail() {
   }, [id]);
 
   // --- NUEVO: MANEJADOR DEL FORMULARIO DE RESEÑAS ---
-  const handleReviewSubmit = (e) => {
+  const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (newReview.comment.trim() === '') return;
     
-    const review = {
-      id: Date.now(),
-      autor: 'Usuario Invitado', // En el futuro acá irá el nombre del usuario logueado
-      fecha: new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }),
-      rating: newReview.rating,
-      comentario: newReview.comment
-    };
-    
-    setReviews([review, ...reviews]); // Agregamos la reseña nueva al principio de la lista
-    setNewReview({ rating: 5, comment: '' }); // Limpiamos el formulario
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/productos/${id}/resenas/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // DNI del usuario
+        },
+        body: JSON.stringify({
+          rating: newReview.rating,
+          comentario: newReview.comment
+        })
+      });
+
+      if (res.ok) {
+        const reviewData = await res.json();
+        setReviews([reviewData, ...reviews]); 
+        setNewReview({ rating: 5, comment: '' });
+      }
+    } catch (error) {
+      console.error("Error al publicar la reseña:", error);
+    }
   };
 
   if (loading) return <div className="pt-32 text-center font-bold">Cargando producto...</div>;
@@ -185,54 +200,66 @@ export default function ProductDetail() {
       <div className="mt-24 pt-12 border-t border-gray-100">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           
-          {/* Columna Izquierda: Formulario para dejar reseña */}
+       {/* Columna Izquierda: Formulario para dejar reseña */}
           <div className="lg:col-span-1">
             <h2 className="text-2xl font-black mb-6 flex items-center gap-2">
               <MessageSquare size={24} /> Dejanos tu opinión
             </h2>
-            <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Calificación</label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setNewReview({ ...newReview, rating: star })}
-                      onMouseEnter={() => setRatingHover(star)}
-                      onMouseLeave={() => setRatingHover(0)}
-                      className="transition-transform hover:scale-110"
-                    >
-                      <Star 
-                        size={28} 
-                        className={`transition-colors ${
-                          star <= (ratingHover || newReview.rating) 
-                            ? 'fill-yellow-400 text-yellow-400' 
-                            : 'text-gray-300'
-                        }`} 
-                      />
-                    </button>
-                  ))}
+            
+            {isAuthenticated ? (
+              <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Calificación</label>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setNewReview({ ...newReview, rating: star })}
+                        onMouseEnter={() => setRatingHover(star)}
+                        onMouseLeave={() => setRatingHover(0)}
+                        className="transition-transform hover:scale-110"
+                      >
+                        <Star 
+                          size={28} 
+                          className={`transition-colors ${
+                            star <= (ratingHover || newReview.rating) 
+                              ? 'fill-yellow-400 text-yellow-400' 
+                              : 'text-gray-300'
+                          }`} 
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Tu comentario</label>
+                  <textarea 
+                    rows="4" 
+                    required
+                    value={newReview.comment}
+                    onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                    placeholder="¿Qué te pareció el producto?"
+                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm focus:border-black focus:ring-black resize-none"
+                  ></textarea>
+                </div>
+                <button 
+                  type="submit"
+                  className="w-full bg-black text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors"
+                >
+                  Publicar Opinión
+                </button>
+              </form>
+            ) : (
+              <div className="bg-gray-50 p-8 rounded-3xl border border-gray-100 text-center">
+                <MessageSquare className="mx-auto text-gray-300 mb-4" size={40} />
+                <h3 className="font-bold text-gray-700 mb-2">¿Ya probaste este producto?</h3>
+                <p className="text-sm text-gray-500 mb-6">Iniciá sesión en tu cuenta para poder compartir tu experiencia.</p>
+                <Link to="/auth" className="inline-block bg-black text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors">
+                  Iniciar Sesión
+                </Link>
               </div>
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Tu comentario</label>
-                <textarea 
-                  rows="4" 
-                  required
-                  value={newReview.comment}
-                  onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
-                  placeholder="¿Qué te pareció el producto?"
-                  className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm focus:border-black focus:ring-black resize-none"
-                ></textarea>
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-black text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors"
-              >
-                Publicar Opinión
-              </button>
-            </form>
+            )}
           </div>
 
           {/* Columna Derecha: Lista de Reseñas */}

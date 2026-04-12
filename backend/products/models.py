@@ -128,3 +128,15 @@ class PerfilUsuario(models.Model):
 def crear_perfil_usuario(sender, instance, created, **kwargs):
     if created:
         PerfilUsuario.objects.create(usuario=instance)
+
+# --- RESEÑAS / COMENTARIOS ---
+class Resena(models.Model):
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='resenas')
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    rating = models.PositiveIntegerField(default=5)
+    comentario = models.TextField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        nombre_usuario = self.usuario.username if self.usuario else 'Anónimo'
+        return f"Reseña de {nombre_usuario} para {self.producto.nombre}"
