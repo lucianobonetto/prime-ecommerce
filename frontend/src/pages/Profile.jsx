@@ -3,7 +3,7 @@ import { User, Package, LogOut, Edit3, CheckCircle, Clock, XCircle, MapPin, Plus
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
-import ProductCard from '../components/ProductCard'; // NUEVO IMPORT PARA LAS TARJETAS
+import ProductCard from '../components/ProductCard';
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(price);

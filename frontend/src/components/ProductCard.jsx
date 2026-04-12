@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { ShoppingCart, Star, Heart } from "lucide-react";
 import { useWishlist } from '../context/WishlistContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from "framer-motion";
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
@@ -15,17 +15,20 @@ const formatPrice = (price) => {
 
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
-  // Validamos que existan variantes antes de asignar la primera
   const hasVariants = product.variantes && product.variantes.length > 0;
   const [selectedVariant, setSelectedVariant] = useState(hasVariants ? product.variantes[0] : null);
-
-  // Verificamos el stock de la variante seleccionada
+  
   const outOfStock = selectedVariant ? selectedVariant.stock_disponible <= 0 : true;
   const { toggleFavorite, isFavorite } = useWishlist();
   const favorited = isFavorite(product.id);
 
+  // LÓGICA DE PRECIOS: Obtenemos el precio final, base y descuento de la variante seleccionada
+  const finalPrice = selectedVariant ? selectedVariant.precio_final : 0;
+  const basePrice = selectedVariant ? selectedVariant.precio_base : 0;
+  const discountPercentage = selectedVariant ? selectedVariant.descuento_porcentual : 0;
+
   return (
- <motion.div 
+    <motion.div 
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -36,10 +39,10 @@ export default function ProductCard({ product }) {
       {/* Contenedor relativo de la Imagen y el Botón */}
       <div className="relative aspect-square mb-4 overflow-hidden bg-gray-50 rounded-2xl block">
         
-        {/* BOTÓN DE FAVORITO (Flota sobre la imagen) */}
+        {/* BOTÓN DE FAVORITO */}
         <button 
           onClick={(e) => {
-            e.preventDefault(); // Evita que al hacer clic en el corazón te lleve al detalle del producto
+            e.preventDefault();
             toggleFavorite(product);
           }}
           className="absolute top-4 right-4 z-20 p-2.5 bg-white/80 backdrop-blur-md rounded-full shadow-sm hover:bg-white transition-colors"
@@ -55,7 +58,7 @@ export default function ProductCard({ product }) {
           </motion.div>
         </button>
 
-        {/* Imagen (Clickeable hacia el Detalle) */}
+        {/* Imagen */}
         <Link to={`/productos/${product.id}`} className="block w-full h-full">
           <img 
             src={product.image || 'https://via.placeholder.com/800'} 
@@ -85,11 +88,34 @@ export default function ProductCard({ product }) {
           </h3>
         </Link>
         
-        <p className="font-black text-2xl mb-4 text-black">
-          {formatPrice(selectedVariant ? selectedVariant.precio_base : 0)}
-        </p>
+        {/* ========================================== */}
+        {/* NUEVO BLOQUE DE PRECIOS VISUALES */}
+        {/* ========================================== */}
+        <div className="flex items-center flex-wrap gap-2 mb-4">
+          {discountPercentage > 0 ? (
+            <>
+              {/* 1. Precio Final (Grande y Negro) */}
+              <p className="font-black text-2xl text-black">
+                {formatPrice(finalPrice)}
+              </p>
+              {/* 2. Precio Base Tachado (Chico y Gris) */}
+              <p className="line-through text-gray-400 text-sm font-medium">
+                {formatPrice(basePrice)}
+              </p>
+              {/* 3. Etiqueta de Porcentaje de Descuento */}
+              <span className="bg-green-100 text-green-700 text-xs font-black px-2 py-1 rounded-md uppercase tracking-wider">
+                {discountPercentage}% OFF
+              </span>
+            </>
+          ) : (
+            // Si no hay descuento, mostramos el precio normal
+            <p className="font-black text-2xl text-black">
+              {formatPrice(basePrice)}
+            </p>
+          )}
+        </div>
 
-        {/* Selector de variantes (adaptado a los nombres de Django en español) */}
+        {/* Selector de variantes */}
         {hasVariants && (
           <div className="mt-auto mb-4">
             <select 
