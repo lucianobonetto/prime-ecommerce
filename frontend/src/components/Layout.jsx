@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import WhatsAppButton from './WhatsAppButton';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp, Shield } from 'lucide-react';
+import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp, Shield, Tag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { 
@@ -21,10 +20,20 @@ export default function Layout({ children }) {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // NUEVO: Lógica del envío gratis
-  const FREE_SHIPPING_THRESHOLD = 50000; // Puse 50.000, pero cambialo al valor que quieras
+  // Lógica del envío gratis
+  const FREE_SHIPPING_THRESHOLD = 50000; 
   const progressPercentage = Math.min((cartTotal / FREE_SHIPPING_THRESHOLD) * 100, 100);
   const amountMissing = FREE_SHIPPING_THRESHOLD - cartTotal;
+
+  // NUEVO: LÓGICA DE AHORRO
+  // Sumamos cuánto saldría todo sin ningún descuento
+  const totalOriginal = cart.reduce((acc, item) => {
+    const base = parseFloat(item.variante.precio_base) || 0;
+    return acc + (base * item.cantidad);
+  }, 0);
+  
+  // Si el total original es mayor al que pagamos, la diferencia es el ahorro
+  const ahorroTotal = totalOriginal > cartTotal ? totalOriginal - cartTotal : 0;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-[#111111] font-sans selection:bg-black selection:text-white relative">
@@ -64,16 +73,15 @@ export default function Layout({ children }) {
             </Link>
           </nav>
 
- {/* ICONOS INTERACTIVOS */}
+          {/* ICONOS INTERACTIVOS */}
           <div className="flex items-center gap-6 text-gray-700">
             
-            {/* NUEVO: BOTÓN PANEL ADMIN (Oculto para mortales, visible para admins) */}
+            {/* BOTÓN PANEL ADMIN */}
             {isAdmin && (
               <Link to="/admin" className="hidden sm:block group relative">
                 <motion.div whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="text-gray-400 hover:text-[#009EE3] transition-colors">
                   <Shield size={22} strokeWidth={2.5} />
                 </motion.div>
-                {/* Tooltip que aparece al pasar el mouse */}
                 <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] font-bold bg-black text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
                   Admin
                 </span>
@@ -98,8 +106,6 @@ export default function Layout({ children }) {
               className="relative hover:text-[#009EE3] transition-colors flex items-center gap-2"
             >
               <ShoppingCart size={24} strokeWidth={2} />
-              
-              {/* Esta key={cartCount} es el truco para que la animación se dispare cada vez que cambia el número */}
               {cartCount > 0 && (
                 <motion.span 
                   key={cartCount} 
@@ -120,36 +126,22 @@ export default function Layout({ children }) {
           </div>
         </div>
       </motion.header>
-{/* NUEVO: MENÚ MÓVIL DESPLEGABLE */}
+
+      {/* MENÚ MÓVIL DESPLEGABLE */}
       <div 
         className={`fixed top-20 left-0 w-full bg-white/95 backdrop-blur-md border-b border-gray-100 z-30 shadow-xl overflow-hidden transition-all duration-300 ease-in-out md:hidden flex flex-col ${
           isMobileMenuOpen ? 'max-h-96 opacity-100 py-6' : 'max-h-0 opacity-0 py-0'
         }`}
       >
         <nav className="flex flex-col gap-6 px-6 text-sm font-black tracking-widest uppercase text-gray-800">
-          <Link 
-            to="/" 
-            onClick={() => setIsMobileMenuOpen(false)} 
-            className="hover:text-[#009EE3] transition-colors"
-          >
+          <Link to="/" onClick={() => setIsMobileMenuOpen(false)} className="hover:text-[#009EE3] transition-colors">
             Inicio
           </Link>
-          <Link 
-            to="/productos" 
-            onClick={() => setIsMobileMenuOpen(false)} 
-            className="hover:text-[#009EE3] transition-colors"
-          >
+          <Link to="/productos" onClick={() => setIsMobileMenuOpen(false)} className="hover:text-[#009EE3] transition-colors">
             Catálogo
           </Link>
-          
-          {/* Línea divisoria */}
           <div className="w-full h-px bg-gray-100 my-2"></div>
-          
-          <Link 
-            to={isAuthenticated ? "/perfil" : "/auth"} 
-            onClick={() => setIsMobileMenuOpen(false)} 
-            className="flex items-center gap-3 text-gray-500 hover:text-black transition-colors"
-          >
+          <Link to={isAuthenticated ? "/perfil" : "/auth"} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 text-gray-500 hover:text-black transition-colors">
             <User size={20} />
             {isAuthenticated ? 'Mi Perfil' : 'Iniciar Sesión'}
           </Link>
@@ -161,14 +153,12 @@ export default function Layout({ children }) {
         {children}
       </main>     
 
-     
       {/* FOOTER NUEVO */}
       <footer className="bg-black text-white pt-16 pb-8 px-6 mt-auto">
         <div className="max-w-7xl mx-auto">
           {/* SECCIÓN SUPERIOR: 4 Columnas */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
             
-            {/* Columna 1: Marca y Redes */}
             <div className="flex flex-col gap-4">
               <div className="text-2xl font-black tracking-tighter uppercase flex items-center gap-2 mb-2">
                 Prime Logic LT<span className="text-[#009EE3]">.</span>
@@ -183,7 +173,6 @@ export default function Layout({ children }) {
               </div>
             </div>
 
-            {/* Columna 2: Navegación */}
             <div className="flex flex-col gap-4">
               <h4 className="text-lg font-bold uppercase tracking-widest mb-2">Navegación</h4>
               <Link to="/" className="text-gray-400 hover:text-white transition-colors text-sm">Inicio</Link>
@@ -191,7 +180,6 @@ export default function Layout({ children }) {
               <Link to={isAuthenticated ? "/perfil" : "/auth"} className="text-gray-400 hover:text-white transition-colors text-sm">Mi Perfil</Link>
             </div>
 
-            {/* Columna 3: Contacto */}
             <div className="flex flex-col gap-4">
               <h4 className="text-lg font-bold uppercase tracking-widest mb-2">Contacto</h4>
               <div className="flex items-center gap-3 text-gray-400 text-sm hover:text-white transition-colors cursor-pointer">
@@ -208,7 +196,6 @@ export default function Layout({ children }) {
               </div>
             </div>
 
-            {/* Columna 4: Newsletter */}
             <div className="flex flex-col gap-4">
               <h4 className="text-lg font-bold uppercase tracking-widest mb-2">Newsletter</h4>
               <p className="text-gray-400 text-sm">
@@ -225,10 +212,9 @@ export default function Layout({ children }) {
                 </button>
               </div>
             </div>
-
           </div>
 
-          {/* SECCIÓN INFERIOR: Copyright & Pagos */}
+          {/* SECCIÓN INFERIOR */}
           <div className="pt-8 border-t border-gray-900 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-gray-500 text-xs font-bold uppercase tracking-widest text-center md:text-left">
               © 2026 Prime Logic LT. Todos los derechos reservados.
@@ -255,17 +241,16 @@ export default function Layout({ children }) {
             <X size={24} />
           </button>
         </div>
-        {/* NUEVO: BARRA DE ENVÍO GRATIS - VERSIÓN ANIMADA Y CREATIVA */}
+        
+        {/* BARRA DE ENVÍO GRATIS */}
         {cart.length > 0 && (
           <div className="bg-gray-50 px-6 py-5 border-b border-gray-100 relative overflow-hidden">
-            {/* Fondo decorativo sutil */}
             <div className="absolute inset-0 opacity-5">
               <Star size={100} className="absolute -top-10 -left-10 text-blue-100" />
               <Star size={80} className="absolute -bottom-10 -right-10 text-blue-100" />
             </div>
 
             {cartTotal >= FREE_SHIPPING_THRESHOLD ? (
-              // ESTADO: ENVÍO GRATIS LOGRADO (CON ANIMACIÓN)
               <motion.div 
                 initial={{ opacity: 0, scale: 0.8, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -285,7 +270,6 @@ export default function Layout({ children }) {
                 </p>
               </motion.div>
             ) : (
-              // ESTADO: PROGRESO HACIA EL ENVÍO GRATIS
               <div className="relative z-10 flex flex-col gap-4">
                 <div className="flex flex-col items-center gap-1.5">
                   <TrendingUp size={16} className="text-[#009EE3]" />
@@ -305,7 +289,6 @@ export default function Layout({ children }) {
               </div>
             )}
           </div>
-        
         )}
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
@@ -315,28 +298,71 @@ export default function Layout({ children }) {
               <p className="text-center font-medium">Tu carrito está vacío</p>
             </div>
           ) : (
-            cart.map((item) => (
-              <div key={item.variante.id} className="flex gap-4 border-b border-gray-100 pb-4">
-                <img src={item.producto.image || 'https://via.placeholder.com/80'} alt={item.producto.nombre} className="w-20 h-20 object-cover rounded-xl bg-gray-100" />
-                <div className="flex-1 flex flex-col justify-center">
-                  <h3 className="font-bold text-gray-800 text-sm leading-tight">{item.producto.nombre}</h3>
-                  <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{item.variante.color} - {item.variante.talle}</p>
-                  <div className="flex justify-between items-center mt-3">
-                    <span className="text-sm font-bold text-black">{item.cantidad} x {formatPrice(item.variante.precio_base)}</span>
-                    <button onClick={() => removeFromCart(item.variante.id)} className="text-gray-400 text-xs font-bold uppercase tracking-widest hover:text-red-500 transition-colors">
-                      Quitar
-                    </button>
+            cart.map((item) => {
+              // NUEVO: Variables para mostrar correctamente el descuento de cada item
+              const precioBase = parseFloat(item.variante.precio_base);
+              const precioFinal = parseFloat(item.variante.precio_final || item.variante.precio_base);
+              const tieneDescuento = precioBase > precioFinal;
+
+              return (
+                <div key={item.variante.id} className="flex gap-4 border-b border-gray-100 pb-4">
+                  <img src={item.producto.image || 'https://via.placeholder.com/80'} alt={item.producto.nombre} className="w-20 h-20 object-cover rounded-xl bg-gray-100" />
+                  <div className="flex-1 flex flex-col justify-center">
+                    <h3 className="font-bold text-gray-800 text-sm leading-tight">{item.producto.nombre}</h3>
+                    <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{item.variante.color} - {item.variante.talle}</p>
+                    
+                    <div className="flex justify-between items-end mt-3">
+                      <div className="flex flex-col">
+                        {/* Mostramos el precio original tachadito si tiene descuento */}
+                        {tieneDescuento && (
+                          <span className="text-[10px] text-gray-400 line-through mb-0.5">
+                            {formatPrice(precioBase)}
+                          </span>
+                        )}
+                        {/* Mostramos el precio que va a pagar (el final) */}
+                        <span className="text-sm font-bold text-black">
+                          {item.cantidad} x {formatPrice(precioFinal)}
+                        </span>
+                      </div>
+                      <button onClick={() => removeFromCart(item.variante.id)} className="text-gray-400 text-xs font-bold uppercase tracking-widest hover:text-red-500 transition-colors">
+                        Quitar
+                      </button>
+                    </div>
+
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
+        {/* FOOTER DEL CARRITO: SUBTOTAL Y AHORRO */}
         <div className="p-6 border-t border-gray-100 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+          
+          {/* NUEVA ETIQUETA DE AHORRO TOTAL */}
+          {ahorroTotal > 0 && (
+            <div className="flex justify-between items-center mb-4 px-4 py-3 bg-green-50 rounded-xl border border-green-100">
+              <span className="font-bold text-green-600 uppercase tracking-widest text-xs flex items-center gap-2">
+                <Tag size={16} /> Estás ahorrando
+              </span>
+              <span className="text-sm font-black text-green-600">
+                {formatPrice(ahorroTotal)}
+              </span>
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-6">
-            <span className="font-bold text-gray-500 uppercase tracking-widest text-sm">Subtotal:</span>
-            <span className="text-3xl font-black text-black">{formatPrice(cartTotal)}</span>
+            <span className="font-bold text-gray-500 uppercase tracking-widest text-sm">Total:</span>
+            <div className="flex flex-col items-end">
+              {ahorroTotal > 0 && (
+                <span className="text-xs font-bold text-gray-400 line-through mb-1">
+                  {formatPrice(totalOriginal)}
+                </span>
+              )}
+              <span className="text-3xl font-black text-black">
+                {formatPrice(cartTotal)}
+              </span>
+            </div>
           </div>
           
           <Link 
