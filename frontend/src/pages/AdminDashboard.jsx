@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Users, Tag, LayoutDashboard, CheckCircle, Clock, XCircle, Edit3, Trash2, Plus, Search, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import ProductForm from '../components/ProductForm';
+
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(price);
@@ -74,6 +76,7 @@ export default function AdminDashboard() {
       default: return <span className="text-gray-500 bg-gray-100 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">Pendiente</span>;
     }
   };
+  const [showForm, setShowForm] = useState(false);
 
   return (
     <div className="pt-28 pb-16 max-w-[1400px] mx-auto px-6 min-h-screen flex flex-col md:flex-row gap-8">
@@ -113,7 +116,10 @@ export default function AdminDashboard() {
           </div>
           
           {(activeTab === 'productos' || activeTab === 'categorias') && (
-            <button className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors">
+            <button 
+              onClick={() => setShowForm(true)} // <-- Al hacer clic, activamos el interruptor
+              className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors"
+              >
               <Plus size={16} /> Nuevo
             </button>
           )}
@@ -291,6 +297,13 @@ export default function AdminDashboard() {
 
             </table>
           )}
+          {/* VENTANA MODAL DE PRODUCTO */}
+      {showForm && (
+        <ProductForm 
+          onClose={() => setShowForm(false)} 
+          refreshData={fetchData} 
+        />
+      )}
         </div>
       </div>
     </div>
