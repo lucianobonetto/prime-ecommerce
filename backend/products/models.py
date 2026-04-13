@@ -6,6 +6,7 @@ from io import BytesIO
 from django.core.files import File
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 # --- CATEGORÍA ---
 class Categoria(models.Model):
@@ -17,7 +18,7 @@ class Categoria(models.Model):
     class Meta:
         verbose_name_plural = "Categorías"
 
-# --- PRODUCTO (Contenedor general) ---
+# --- PRODUCTO ---
 class Producto(models.Model):
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField()
@@ -27,7 +28,7 @@ class Producto(models.Model):
     def __str__(self): 
         return self.nombre
 
-# --- VARIANTE (Talles, Colores, Stock, SKU y QR Automático) ---
+# --- VARIANTE ---
 class Variante(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='variantes')
     sku = models.CharField(max_length=50, unique=True)
@@ -50,13 +51,12 @@ class Variante(models.Model):
             qr_image.save(buffer, format='PNG')
             file_name = f'qr-{self.sku}.png'
             self.qr_code.save(file_name, File(buffer), save=False)
-            
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.producto.nombre} - {self.talle} / {self.color} ({self.sku})"
 
-# --- CARRITO E ITEMS (Temporales) ---
+# --- CARRITO ---
 class Carrito(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE)
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -70,10 +70,7 @@ class ItemCarrito(models.Model):
     variante = models.ForeignKey(Variante, on_delete=models.CASCADE)
     cantidad = models.PositiveIntegerField(default=1)
 
-    def __str__(self):
-        return f"{self.cantidad} x {self.variante.sku}"
-
-# --- NUEVO: LIBRETA DE DIRECCIONES DEL USUARIO ---
+# --- DIRECCIÓN ---
 class Direccion(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='direcciones')
     calle = models.CharField(max_length=200)
@@ -86,15 +83,33 @@ class Direccion(models.Model):
     def __str__(self):
         return f"{self.calle} {self.numero}, {self.ciudad}"
 
-# --- PEDIDO E ITEMS (Historial inmutable) ---
+# --- PEDIDO (ESTANDARIZADO) ---
 class Pedido(models.Model):
+    # Definición de Estados Estandarizados
+    PENDIENTE = 'pendiente'
+    PAGADO = 'pagado'
+    ENVIADO = 'enviado'
+    ENTREGADO = 'entregado'
+    FALLIDO = 'fallido'
+
+    ESTADO_CHOICES = [
+        (PENDIENTE, 'Pendiente'),
+        (PAGADO, 'Pagado'),
+        (ENVIADO, 'Enviado'),
+        (ENTREGADO, 'Entregado'),
+        (FALLIDO, 'Fallido'),
+    ]
+
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     fecha = models.DateTimeField(auto_now_add=True)
-    estado = models.CharField(max_length=50, default='pendiente')
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default=PENDIENTE
+    )
     total_final = models.DecimalField(max_digits=10, decimal_places=2)
     payment_id = models.CharField(max_length=100, null=True, blank=True)
     
-    # SNAPSHOT DE ENVÍO (Foto inmutable del momento de la compra)
     metodo_envio = models.CharField(max_length=50, default='sucursal')
     envio_calle = models.CharField(max_length=200, null=True, blank=True)
     envio_numero = models.CharField(max_length=50, null=True, blank=True)
@@ -104,7 +119,7 @@ class Pedido(models.Model):
     envio_descripcion = models.CharField(max_length=200, null=True, blank=True)
 
     def __str__(self):
-        return f"Pedido #{self.id} - {self.estado}"
+        return f"Pedido #{self.id} - {self.get_estado_display()}"
 
 class ItemPedido(models.Model):
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='items')
@@ -112,31 +127,34 @@ class ItemPedido(models.Model):
     cantidad = models.PositiveIntegerField()
     precio_historico = models.DecimalField(max_digits=10, decimal_places=2)
 
-    def __str__(self):
-        return f"{self.cantidad} x {self.variante.producto.nombre} (Pedido {self.pedido.id})"
-
-# --- PERFIL DE USUARIO ---
+# --- PERFIL ---
 class PerfilUsuario(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
     telefono = models.CharField(max_length=50, null=True, blank=True)
 
-    def __str__(self):
-        return f"Perfil de {self.usuario.username}"
-
-# Esto crea un Perfil en blanco automáticamente cada vez que se registra un User nuevo en Django
 @receiver(post_save, sender=User)
 def crear_perfil_usuario(sender, instance, created, **kwargs):
     if created:
         PerfilUsuario.objects.create(usuario=instance)
 
-# --- RESEÑAS / COMENTARIOS ---
+# --- RESEÑAS (ACTUALIZADO) ---
 class Resena(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='resenas')
-    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    rating = models.PositiveIntegerField(default=5)
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='resenas')
+    # Vinculamos al pedido para saber si es "Compra Verificada"
+    pedido = models.ForeignKey(Pedido, on_delete=models.SET_NULL, null=True, blank=True, related_name='resenas')
+    
+    rating = models.PositiveIntegerField(
+        default=5,
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
     comentario = models.TextField()
     fecha_creacion = models.DateTimeField(auto_now_add=True)
+    aprobado = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-fecha_creacion']
+        unique_together = ('usuario', 'producto') # Un usuario solo puede reseñar un producto una vez
 
     def __str__(self):
-        nombre_usuario = self.usuario.username if self.usuario else 'Anónimo'
-        return f"Reseña de {nombre_usuario} para {self.producto.nombre}"
+        return f"{self.rating}★ - {self.usuario.username} para {self.producto.nombre}"

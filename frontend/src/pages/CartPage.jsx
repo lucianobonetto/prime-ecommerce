@@ -94,9 +94,18 @@ export default function CartPage() {
         shipping_details: deliveryMethod === 'domicilio' ? activeDetails : null
       };
 
+      // --- LA MAGIA: Capturamos el token del usuario logueado ---
+      const token = localStorage.getItem('token');
+      
+      // Configuramos los headers dinámicamente
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`; // El puente de conexión con Django
+      }
+
       const response = await fetch('http://127.0.0.1:8000/api/create_preference/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers, // Usamos nuestros nuevos headers
         body: JSON.stringify(payload),
       });
 
@@ -106,12 +115,12 @@ export default function CartPage() {
         window.location.href = data.init_point;
       } else {
         alert('Error al generar el pago: ' + (data.error || 'Desconocido'));
-        setIsLoading(false); // Liberamos carga si hay error
+        setIsLoading(false); 
       }
     } catch (error) {
       console.error('Error:', error);
       alert('Error al conectar con el servidor de pagos.');
-      setIsLoading(false); // Liberamos carga si hay error
+      setIsLoading(false); 
     }
   };
 

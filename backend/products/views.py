@@ -1,8 +1,9 @@
 import mercadopago
 from django.conf import settings
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS # NUEVOS IMPORT
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 import re
 from django.contrib.auth.models import User
@@ -196,6 +197,7 @@ def admin_usuarios(request):
 # --- VISTAS DE PAGO (MANTENIDAS EXACTAMENTE IGUAL) ---
 # =========================================================
 @api_view(['POST'])
+@authentication_classes([JWTAuthentication]) # <-- ESTO HACE QUE LEA EL TOKEN
 def create_preference(request):
     try:
         sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
@@ -234,10 +236,11 @@ def create_preference(request):
             except Variante.DoesNotExist:
                 return Response({'error': f"El producto {item.get('title')} ya no existe en el catálogo."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Ahora sí Django sabe quién es el usuario porque leyó el Token
         usuario_pedido = request.user if request.user.is_authenticated else None
 
         pedido = Pedido.objects.create(
-            usuario=usuario_pedido,
+            usuario=usuario_pedido, # <- Acá se guarda el cliente asignado
             total_final=total_price_seguro,
             estado='pendiente',
             metodo_envio=delivery_method,
@@ -263,12 +266,12 @@ def create_preference(request):
         preference_data = {
             "items": items_for_mp,
             "external_reference": str(pedido.id), 
-           "notification_url": "https://697d9a6d93a1dd.lhr.life/api/webhook/",
-        "back_urls": {
-            "success": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/",
-            "failure": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/",
-            "pending": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/"
-        },
+            "notification_url": "https://697d9a6d93a1dd.lhr.life/api/webhook/",
+            "back_urls": {
+                "success": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/",
+                "failure": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/",
+                "pending": "https://697d9a6d93a1dd.lhr.life/api/mp-redirect/"
+            },
             "auto_return": "approved",
         }
 
@@ -282,7 +285,7 @@ def create_preference(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+    
 @api_view(['POST'])
 def mercadopago_webhook(request):
     try:
