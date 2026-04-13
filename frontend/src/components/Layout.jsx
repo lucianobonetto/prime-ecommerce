@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import WhatsAppButton from './WhatsAppButton';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, X, User, Instagram, Facebook, Twitter, MapPin, Phone, Mail, ArrowRight, Star, Gift, TrendingUp, Shield, Tag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -35,6 +35,16 @@ export default function Layout({ children }) {
   
   // Si el total original es mayor al que pagamos, la diferencia es el ahorro
   const ahorroTotal = totalOriginal > cartTotal ? totalOriginal - cartTotal : 0;
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const handleGlobalSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/productos?q=${searchQuery}`);
+      setSearchQuery(''); // Limpiamos la barra después de buscar
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-[#111111] font-sans selection:bg-black selection:text-white relative">
@@ -93,9 +103,18 @@ export default function Layout({ children }) {
               </Link>
             )}
 
-            <motion.button whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="hover:text-[#009EE3] transition-colors hidden sm:block">
-              <Search size={22} strokeWidth={2} />
-            </motion.button>
+            <form onSubmit={handleGlobalSearch} className="hidden lg:flex items-center relative">
+              <input 
+                 type="text" 
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-gray-50 border border-gray-100 text-sm font-medium rounded-full py-2 pl-4 pr-10 focus:outline-none focus:border-black focus:ring-1 focus:ring-black w-48 transition-all"
+                />
+              <button type="submit" className="absolute right-3 text-gray-400 hover:text-[#009EE3] transition-colors">
+                 <Search size={16} strokeWidth={2.5} />
+             </button>
+            </form>
             
             <Link to={isAuthenticated ? "/perfil" : "/auth"} className="hidden sm:block">
               <motion.div whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }} className="hover:text-[#009EE3] transition-colors">
