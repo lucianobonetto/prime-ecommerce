@@ -34,4 +34,5 @@ urlpatterns = [
     path('admin/usuarios/', views.admin_usuarios, name='admin-usuarios'),
 
     path('productos/<int:producto_id>/resenas/', views.crear_resena, name='crear-resena'),
+    path('productos/<int:producto_id>/puedo-comentar/', views.verificar_compra_entregada, name='verificar_compra'),
 ]

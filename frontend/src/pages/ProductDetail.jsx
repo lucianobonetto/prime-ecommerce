@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'; // <-- NUEVO DE COMENT
 import { Link } from 'react-router-dom'; // <-- NUEVO DE COMENT
 import { ShoppingCart, ArrowLeft, ShieldCheck, Truck, Star, MessageSquare } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
+import { toast } from 'sonner';
 
 const formatPrice = (price) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(price);
@@ -20,11 +21,12 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [relatedProducts, setRelatedProducts] = useState([]);
 
-  // --- NUEVO: ESTADOS PARA LAS RESEÑAS ---
-  const { isAuthenticated } = useAuth(); // <-- NUEVO: Para saber si está logueado
+// --- ESTADOS PARA LAS RESEÑAS ---
+  const { isAuthenticated } = useAuth();
   const [ratingHover, setRatingHover] = useState(0);
   const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
-  const [reviews, setReviews] = useState([]); // <-- AHORA ARRANCA VACÍO
+  const [reviews, setReviews] = useState([]);
+  const [canComment, setCanComment] = useState(false); // <-- NUEVO ESTADO
 
   useEffect(() => {
     setLoading(true);
@@ -38,6 +40,19 @@ export default function ProductDetail() {
         if (data.variantes && data.variantes.length > 0) {
           setSelectedVariant(data.variantes[0]);
         }
+        // --- NUEVA LÓGICA: ¿Puede Comentar? ---
+        const token = localStorage.getItem('token');
+        if (isAuthenticated && token) {
+          fetch(`http://127.0.0.1:8000/api/productos/${id}/puedo-comentar/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.puede_comentar) setCanComment(true);
+          })
+          .catch(err => console.error("Error verificando permisos de reseña:", err));
+        }
+        // -------------------------------------
         return fetch('http://127.0.0.1:8000/api/productos/');
       })
       .then(res => res.json())
@@ -50,9 +65,10 @@ export default function ProductDetail() {
         console.error(err);
         setLoading(false);
       });
-  }, [id]);
+  }, [id, isAuthenticated]); // <-- IMPORTANTE: Agregamos isAuthenticated a las dependencias
 
   // --- NUEVO: MANEJADOR DEL FORMULARIO DE RESEÑAS ---
+// --- MANEJADOR DEL FORMULARIO DE RESEÑAS ---
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (newReview.comment.trim() === '') return;
@@ -65,7 +81,7 @@ export default function ProductDetail() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // DNI del usuario
+          'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({
           rating: newReview.rating,
@@ -77,9 +93,15 @@ export default function ProductDetail() {
         const reviewData = await res.json();
         setReviews([reviewData, ...reviews]); 
         setNewReview({ rating: 5, comment: '' });
+        toast.success("¡Gracias por tu opinión!"); // Mensaje de éxito
+      } else {
+        // --- NUEVO: Atrapamos el error de Django y lo mostramos ---
+        const errorData = await res.json();
+        toast.error(errorData.error || "Ocurrió un error al publicar.");
       }
     } catch (error) {
       console.error("Error al publicar la reseña:", error);
+      toast.error("Error de conexión con el servidor.");
     }
   };
 
@@ -206,7 +228,26 @@ export default function ProductDetail() {
               <MessageSquare size={24} /> Dejanos tu opinión
             </h2>
             
-            {isAuthenticated ? (
+            {/* LOGICA VISUAL DEL FORMULARIO DE RESEÑA */}
+            {!isAuthenticated ? (
+              // 1. NO LOGUEADO
+              <div className="bg-gray-50 p-8 rounded-3xl border border-gray-100 text-center">
+                <MessageSquare className="mx-auto text-gray-300 mb-4" size={40} />
+                <h3 className="font-bold text-gray-700 mb-2">¿Querés dejar tu opinión?</h3>
+                <p className="text-sm text-gray-500 mb-6">Iniciá sesión en tu cuenta para poder compartir tu experiencia.</p>
+                <Link to="/auth" className="inline-block bg-black text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors">
+                  Iniciar Sesión
+                </Link>
+              </div>
+            ) : !canComment ? (
+              // 2. LOGUEADO, PERO NO COMPRÓ O NO RECIBIÓ
+              <div className="bg-orange-50 p-8 rounded-3xl border border-orange-100 text-center">
+                <ShieldCheck className="mx-auto text-orange-400 mb-4" size={40} />
+                <h3 className="font-bold text-orange-800 mb-2">Solo compras verificadas</h3>
+                <p className="text-sm text-orange-600">Para mantener la transparencia, solo permitimos reseñas de clientes que hayan comprado y recibido este producto.</p>
+              </div>
+            ) : (
+              // 3. LOGUEADO, COMPRÓ Y RECIBIÓ (MOSTRAR FORMULARIO)
               <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
                 <div className="mb-4">
                   <label className="block text-sm font-bold text-gray-700 mb-2">Calificación</label>
@@ -250,15 +291,6 @@ export default function ProductDetail() {
                   Publicar Opinión
                 </button>
               </form>
-            ) : (
-              <div className="bg-gray-50 p-8 rounded-3xl border border-gray-100 text-center">
-                <MessageSquare className="mx-auto text-gray-300 mb-4" size={40} />
-                <h3 className="font-bold text-gray-700 mb-2">¿Ya probaste este producto?</h3>
-                <p className="text-sm text-gray-500 mb-6">Iniciá sesión en tu cuenta para poder compartir tu experiencia.</p>
-                <Link to="/auth" className="inline-block bg-black text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors">
-                  Iniciar Sesión
-                </Link>
-              </div>
             )}
           </div>
 
