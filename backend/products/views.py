@@ -489,6 +489,13 @@ def mercadopago_redirect(request):
 def crear_resena(request, producto_id):
     try:
         producto = Producto.objects.get(id=producto_id)
+        # --- NUEVO: Verificamos si el usuario ya dejó una reseña ---
+        if Resena.objects.filter(producto=producto, usuario=request.user).exists():
+            return Response(
+                {"error": "Ya compartiste tu opinión sobre este producto. ¡Gracias!"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # ------------------------------------------------------------
         
         rating = request.data.get('rating', 5)
         comentario = request.data.get('comentario', '')
@@ -514,3 +521,31 @@ def crear_resena(request, producto_id):
             {"error": "Producto no encontrado."}, 
             status=status.HTTP_404_NOT_FOUND
         )
+    
+    # =========================================================
+# --- VISTA PARA VALIDAR SI EL USUARIO PUEDE COMENTAR ---
+# =========================================================
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def verificar_compra_entregada(request, producto_id):
+    """
+    Verifica si el usuario logueado tiene al menos un pedido en estado 'entregado'
+    que contenga una variante de este producto específico.
+    """
+    try:
+        producto = Producto.objects.get(id=producto_id)
+        
+        # Buscamos si existe ALGÚN ItemPedido que:
+        # 1. Pertenezca al usuario actual
+        # 2. El estado del pedido sea 'entregado'
+        # 3. La variante del item pertenezca al producto que estamos viendo
+        tiene_compra_entregada = ItemPedido.objects.filter(
+            pedido__usuario=request.user,
+            pedido__estado='entregado',
+            variante__producto=producto
+        ).exists()
+
+        return Response({"puede_comentar": tiene_compra_entregada}, status=status.HTTP_200_OK)
+
+    except Producto.DoesNotExist:
+        return Response({"error": "Producto no encontrado."}, status=status.HTTP_404_NOT_FOUND)
