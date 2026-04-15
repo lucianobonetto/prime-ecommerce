@@ -32,6 +32,10 @@ urlpatterns = [
     path('admin/pedidos/', views.admin_pedidos, name='admin-pedidos'),
     path('admin/pedidos/<int:pk>/estado/', views.admin_actualizar_pedido, name='admin-actualizar-pedido'),
     path('admin/usuarios/', views.admin_usuarios, name='admin-usuarios'),
+    path('admin/crear-producto/', views.crear_producto_con_variante, name='crear_producto'),
+    path('admin/productos-completos/', views.admin_productos, name='admin_productos'),
+    path('admin/editar-producto/<int:pk>/', views.admin_editar_producto, name='admin_editar_producto'),
+    path('admin/sumar-stock/', views.admin_sumar_stock, name='admin_sumar_stock'),
 
     path('productos/<int:producto_id>/resenas/', views.crear_resena, name='crear-resena'),
 ]

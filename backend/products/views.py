@@ -2,10 +2,13 @@ import mercadopago
 from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS # NUEVOS IMPORT
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.utils.crypto import get_random_string
 from rest_framework.response import Response
 import re
+from decimal import Decimal
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from django.db import transaction
@@ -15,17 +18,14 @@ from django.shortcuts import redirect
 from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario, Direccion, Resena
 from .serializers import CategorySerializer, ProductSerializer, ResenaSerializer
 
-# --- NUEVO: Permiso personalizado para el Catálogo ---
+# --- PERMISO PERSONALIZADO PARA EL CATÁLOGO ---
 class IsAdminOrReadOnly(BasePermission):
     def has_permission(self, request, view):
-        # Si es un método seguro (GET, HEAD, OPTIONS), dejamos pasar a cualquiera
         if request.method in SAFE_METHODS:
             return True
-        # Si es POST, PUT, DELETE, solo dejamos pasar si es staff (Admin)
         return bool(request.user and request.user.is_staff)
 
-# --- VISTAS DEL CATÁLOGO (ACTUALIZADAS PARA ABM) ---
-# Cambiamos ReadOnlyModelViewSet a ModelViewSet y aplicamos el permiso
+# --- VISTAS DEL CATÁLOGO ---
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Categoria.objects.all()
     serializer_class = CategorySerializer
@@ -49,7 +49,7 @@ def mi_perfil(request):
             "apellido": user.last_name,
             "email": user.email,
             "telefono": perfil.telefono,
-            "is_admin": user.is_staff # NUEVO: Le avisamos a React si es administrador
+            "is_admin": user.is_staff 
         }
         return Response(data)
 
@@ -127,13 +127,12 @@ def mis_pedidos(request):
         })
     return Response(data)
 
-
 # =========================================================
 # --- VISTAS EXCLUSIVAS DEL PANEL DE ADMINISTRACIÓN ---
 # =========================================================
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser]) # Solo staff puede ver esto
+@permission_classes([IsAdminUser])
 def admin_pedidos(request):
     pedidos = Pedido.objects.all().order_by('-fecha')
     data = []
@@ -141,7 +140,6 @@ def admin_pedidos(request):
         items = ItemPedido.objects.filter(pedido=pedido)
         resumen = ", ".join([f"{item.variante.producto.nombre} ({item.variante.talle}) x{item.cantidad}" for item in items])
         
-        # Armamos la dirección de forma segura
         direccion_envio = "Retiro en sucursal"
         if pedido.metodo_envio == 'domicilio' and pedido.envio_calle:
             direccion_envio = f"{pedido.envio_calle} {pedido.envio_numero}, {pedido.envio_ciudad}"
@@ -192,12 +190,130 @@ def admin_usuarios(request):
         })
     return Response(data)
 
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@authentication_classes([JWTAuthentication])
+def crear_producto_con_variante(request):
+    try:
+        categoria_id = request.data.get('categoria')
+        try:
+            categoria = Categoria.objects.get(id=categoria_id)
+        except Categoria.DoesNotExist:
+            categoria = Categoria.objects.first()
+            if not categoria:
+                categoria = Categoria.objects.create(nombre="General")
+
+        producto = Producto.objects.create(
+            nombre=request.data.get('nombre'),
+            descripcion=request.data.get('descripcion', 'Sin descripción'),
+            categoria=categoria,
+            imagen=request.FILES.get('image') 
+        )
+
+        sku_generado = request.data.get('sku') or f"SKU-{get_random_string(8).upper()}"
+        precio_base = request.data.get('precio_base') or 0
+        stock = request.data.get('stock') or 0
+        
+        Variante.objects.create(
+            producto=producto,
+            sku=sku_generado,
+            talle=request.data.get('talle', 'Único'),
+            color=request.data.get('color', 'Único'),
+            precio_base=Decimal(precio_base),
+            stock_disponible=int(stock)
+        )
+
+        return Response({"mensaje": "Producto y variante inicial creados exitosamente"}, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        print("❌ Error creando producto:", str(e))
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_productos(request):
+    productos = Producto.objects.all().order_by('-id')
+    data = []
+    for p in productos:
+        v = p.variantes.first()
+        data.append({
+            "id": p.id,
+            "nombre": p.nombre,
+            "descripcion": p.descripcion,
+            "categoria": {"id": p.categoria.id, "nombre": p.categoria.nombre} if p.categoria else None,
+            "image": p.imagen.url if p.imagen else None,
+            "precio_base": v.precio_base if v else 0,
+            "stock": v.stock_disponible if v else 0,
+            "talle": v.talle if v else 'Único',
+            "color": v.color if v else 'Único',
+            "sku": v.sku if v else ''
+        })
+    return Response(data)
+
+@api_view(['PUT'])
+@permission_classes([IsAdminUser])
+@authentication_classes([JWTAuthentication])
+def admin_editar_producto(request, pk):
+    try:
+        producto = Producto.objects.get(pk=pk)
+        producto.nombre = request.data.get('nombre', producto.nombre)
+        producto.descripcion = request.data.get('descripcion', producto.descripcion)
+        
+        cat_id = request.data.get('categoria')
+        if cat_id:
+            producto.categoria_id = cat_id
+            
+        if 'image' in request.FILES:
+            producto.imagen = request.FILES['image']
+        producto.save()
+
+        variante = producto.variantes.first()
+        if variante:
+            # Salvavidas por si llega un campo vacío desde el frontend
+            precio = request.data.get('precio_base')
+            stock = request.data.get('stock')
+            
+            variante.precio_base = Decimal(precio) if precio else variante.precio_base
+            variante.stock_disponible = int(stock) if stock else variante.stock_disponible
+            variante.talle = request.data.get('talle', variante.talle)
+            variante.color = request.data.get('color', variante.color)
+            variante.sku = request.data.get('sku', variante.sku)
+            variante.save()
+
+        return Response({"mensaje": "Producto actualizado con éxito"})
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@authentication_classes([JWTAuthentication])
+def admin_sumar_stock(request):
+    try:
+        producto_id = request.data.get('producto_id')
+        cantidad = int(request.data.get('cantidad') or 0)
+        
+        if cantidad <= 0:
+            return Response({"error": "La cantidad debe ser mayor a 0"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        producto = Producto.objects.get(id=producto_id)
+        variante = producto.variantes.first()
+        
+        if variante:
+            variante.stock_disponible += cantidad
+            variante.save()
+            return Response({"mensaje": f"Se sumaron {cantidad} unidades al stock."})
+        else:
+            return Response({"error": "El producto no tiene variantes asociadas."}, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 # =========================================================
-# --- VISTAS DE PAGO (MANTENIDAS EXACTAMENTE IGUAL) ---
+# --- VISTAS DE PAGO ---
 # =========================================================
 @api_view(['POST'])
-@authentication_classes([JWTAuthentication]) # <-- ESTO HACE QUE LEA EL TOKEN
+@authentication_classes([JWTAuthentication])
 def create_preference(request):
     try:
         sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
@@ -236,11 +352,10 @@ def create_preference(request):
             except Variante.DoesNotExist:
                 return Response({'error': f"El producto {item.get('title')} ya no existe en el catálogo."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Ahora sí Django sabe quién es el usuario porque leyó el Token
         usuario_pedido = request.user if request.user.is_authenticated else None
 
         pedido = Pedido.objects.create(
-            usuario=usuario_pedido, # <- Acá se guarda el cliente asignado
+            usuario=usuario_pedido,
             total_final=total_price_seguro,
             estado='pendiente',
             metodo_envio=delivery_method,
@@ -317,12 +432,10 @@ def mercadopago_webhook(request):
                             pedido.estado = 'fallido'
                             
                         pedido.save()
-                        print(f"✅ Pedido #{pedido.id} actualizado a: {pedido.estado}. Stock descontado si fue pagado.")
                     
         return Response(status=status.HTTP_200_OK)
     
     except Exception as e:
-        print(f"Error en webhook: {e}")
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
@@ -368,12 +481,11 @@ def mercadopago_redirect(request):
     return redirect('http://localhost:5173/success')
 
 # =========================================================
-# --- NUEVO: VISTAS DE RESEÑAS / COMENTARIOS ---
+# --- VISTAS DE RESEÑAS / COMENTARIOS ---
 # =========================================================
-# from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated]) # <-- NUEVO: CANDADO DE SEGURIDAD
+@permission_classes([IsAuthenticated]) 
 def crear_resena(request, producto_id):
     try:
         producto = Producto.objects.get(id=producto_id)
@@ -387,7 +499,6 @@ def crear_resena(request, producto_id):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Como exigimos estar logueados, request.user siempre va a existir
         resena = Resena.objects.create(
             producto=producto,
             usuario=request.user,
