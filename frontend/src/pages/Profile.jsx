@@ -15,7 +15,6 @@ export default function Profile() {
   const navigate = useNavigate();
   const { favorites } = useWishlist();
   
-  // Estados para Perfil
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [userProfile, setUserProfile] = useState({
     nombre: "",
@@ -24,16 +23,15 @@ export default function Profile() {
     telefono: ""
   });
 
-  // Estados para Pedidos y Direcciones
   const [pedidos, setPedidos] = useState([]);
   const [direcciones, setDirecciones] = useState([]);
   
-  // Estados para el formulario de Direcciones
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [currentAddress, setCurrentAddress] = useState({
     id: null, calle: '', numero: '', codigoPostal: '', ciudad: '', telefono: '', descripcion: ''
   });
 
+  // Redirección forzada y recarga de datos segura
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/auth');
@@ -41,17 +39,35 @@ export default function Profile() {
     }
 
     const token = localStorage.getItem('token');
-    if (token) {
-      fetch('http://127.0.0.1:8000/api/mi-perfil/', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(res => res.json()).then(data => setUserProfile(data)).catch(() => {});
+    if (!token) return;
 
-      fetch('http://127.0.0.1:8000/api/mis-pedidos/', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(res => res.json()).then(data => setPedidos(data)).catch(() => {});
+    const loadProfileData = async () => {
+      try {
+        const headers = { 'Authorization': `Bearer ${token}` };
 
-      fetch('http://127.0.0.1:8000/api/mis-direcciones/', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(res => res.json()).then(data => setDirecciones(data)).catch(() => {});
-    }
-  }, [isAuthenticated, navigate]);
+        const [resPerfil, resPedidos, resDirecciones] = await Promise.all([
+          fetch('http://127.0.0.1:8000/api/mi-perfil/', { headers }),
+          fetch('http://127.0.0.1:8000/api/mis-pedidos/', { headers }),
+          fetch('http://127.0.0.1:8000/api/mis-direcciones/', { headers })
+        ]);
+
+        // Control de Token Expirado
+        if (resPerfil.status === 401 || resPedidos.status === 401 || resDirecciones.status === 401) {
+          logout();
+          return;
+        }
+
+        if (resPerfil.ok) setUserProfile(await resPerfil.json());
+        if (resPedidos.ok) setPedidos(await resPedidos.json());
+        if (resDirecciones.ok) setDirecciones(await resDirecciones.json());
+
+      } catch (error) {
+        console.error("Error cargando el perfil:", error);
+      }
+    };
+
+    loadProfileData();
+  }, [isAuthenticated, navigate, logout]);
 
   const getStatusBadge = (estado) => {
     switch (estado) {
@@ -64,7 +80,6 @@ export default function Profile() {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
   };
 
   const handleSaveProfile = async (e) => {
@@ -72,11 +87,16 @@ export default function Profile() {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        await fetch('http://127.0.0.1:8000/api/mi-perfil/', {
+        const res = await fetch('http://127.0.0.1:8000/api/mi-perfil/', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(userProfile)
         });
+        
+        if (res.status === 401) {
+          logout();
+          return;
+        }
       } catch (error) { console.error(error); }
     }
     setIsEditingProfile(false);
@@ -106,8 +126,14 @@ export default function Profile() {
           body: JSON.stringify(currentAddress)
         });
         
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        
         if (res.ok) {
           const updatedRes = await fetch('http://127.0.0.1:8000/api/mis-direcciones/', { headers: { 'Authorization': `Bearer ${token}` }});
+          if (updatedRes.status === 401) { logout(); return; }
           const updatedData = await updatedRes.json();
           setDirecciones(updatedData);
         }
@@ -121,10 +147,15 @@ export default function Profile() {
     const token = localStorage.getItem('token');
     
     if (token) {
-      await fetch(`http://127.0.0.1:8000/api/mis-direcciones/${id}/`, {
+      const res = await fetch(`http://127.0.0.1:8000/api/mis-direcciones/${id}/`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
+      if (res.status === 401) {
+        logout();
+        return;
+      }
       setDirecciones(direcciones.filter(d => d.id !== id));
     }
   };
@@ -132,7 +163,6 @@ export default function Profile() {
   return (
     <div className="pt-28 pb-16 max-w-7xl mx-auto px-6 min-h-screen flex flex-col md:flex-row gap-8">
       
-      {/* MENÚ LATERAL */}
       <aside className="w-full md:w-72 flex-shrink-0">
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm sticky top-28">
           <div className="flex items-center gap-4 mb-8 pb-8 border-b border-gray-100">
@@ -153,7 +183,6 @@ export default function Profile() {
               <MapPin size={18} /> Mis Direcciones
             </button>
             
-            {/* NUEVA PESTAÑA: FAVORITOS */}
             <button onClick={() => setActiveTab('favoritos')} className={`flex items-center gap-3 p-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'favoritos' ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
               <Heart size={18} className={activeTab === 'favoritos' ? 'fill-white text-white' : ''} /> 
               Mis Favoritos ({favorites.length})
@@ -170,10 +199,8 @@ export default function Profile() {
         </div>
       </aside>
 
-      {/* CONTENIDO PRINCIPAL */}
       <div className="flex-1">
         
-        {/* PESTAÑA: PEDIDOS */}
         {activeTab === 'pedidos' && (
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
             <h2 className="text-2xl font-black mb-8 flex items-center gap-2"><Package size={24}/> Historial de Pedidos</h2>
@@ -202,7 +229,6 @@ export default function Profile() {
           </div>
         )}
 
-        {/* PESTAÑA: DIRECCIONES */}
         {activeTab === 'direcciones' && (
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
             <div className="flex justify-between items-center mb-8">
@@ -273,7 +299,6 @@ export default function Profile() {
           </div>
         )}
 
-        {/* NUEVA PESTAÑA: FAVORITOS */}
         {activeTab === 'favoritos' && (
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
             <h2 className="text-2xl font-black mb-8 flex items-center gap-2"><Heart size={24}/> Mis Favoritos</h2>
@@ -292,7 +317,6 @@ export default function Profile() {
           </div>
         )}
 
-        {/* PESTAÑA: PERFIL */}
         {activeTab === 'perfil' && (
           <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
             <div className="flex justify-between items-center mb-8">

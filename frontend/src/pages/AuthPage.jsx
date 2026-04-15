@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // NUEVO IMPORT
+import { useAuth } from '../context/AuthContext';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -9,7 +9,7 @@ export default function AuthPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const navigate = useNavigate();
-  const { login } = useAuth(); // NUEVO HOOK
+  const { login } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -38,12 +38,13 @@ export default function AuthPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // En lugar de solo guardar el token en localStorage, usamos el Context
         login(data.access); 
         setSuccess("Inicio de sesión exitoso. Redirigiendo...");
-        setTimeout(() => navigate('/perfil'), 1500);
+        // Reducimos drásticamente el tiempo de espera para que se sienta fluido
+        setTimeout(() => navigate('/perfil'), 400); 
       } else {
-        setError(data.detail || "Credenciales incorrectas.");
+        // Pisamos el error por defecto de Django por tu frase personalizada
+        setError("Combinación incorrecta, correo o contraseña erróneas.");
       }
     } catch (err) {
       setError("Error de conexión con el servidor.");

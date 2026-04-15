@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Users, Tag, LayoutDashboard, CheckCircle, Clock, XCircle, Edit3, Trash2, Plus, Search, Truck, ShoppingCart, Filter, Calendar, DollarSign } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProductForm from '../components/ProductForm';
 import CategoryForm from '../components/CategoryForm';
@@ -21,30 +22,37 @@ export default function AdminDashboard() {
   const [categoriaAEditar, setCategoriaAEditar] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
-  // Estado para la pestaña "Registrar Compra"
   const [compraData, setCompraData] = useState({ producto_id: '', cantidad: '' });
 
-  // NUEVOS ESTADOS: Filtros de Pedidos
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
 
   const token = localStorage.getItem('token');
+  const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
 
-  // Configurar las fechas por defecto (último mes) al montar el componente
+  // Redirección forzada si no está logueado
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [isAuthenticated, navigate]);
+
   useEffect(() => {
     const hoy = new Date();
     const mesPasado = new Date();
     mesPasado.setMonth(hoy.getMonth() - 1);
     
-    // Formato YYYY-MM-DD para los inputs de tipo date
     setFiltroHasta(hoy.toISOString().split('T')[0]);
     setFiltroDesde(mesPasado.toISOString().split('T')[0]);
   }, []);
 
   useEffect(() => {
-    fetchData(activeTab);
-  }, [activeTab]);
+    if (isAuthenticated) {
+      fetchData(activeTab);
+    }
+  }, [activeTab, isAuthenticated]);
 
   const fetchData = async (tab) => {
     setIsLoading(true);
@@ -57,6 +65,13 @@ export default function AdminDashboard() {
       if (tab === 'productos' || tab === 'compras') url = 'http://127.0.0.1:8000/api/admin/productos-completos/';
 
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      
+      // Control de Token Expirado
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+
       if (res.ok) {
         const result = await res.json();
         setData(result);
@@ -75,6 +90,12 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ estado: nuevoEstado })
       });
+      
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+
       if (res.ok) {
         setEditingPedido(null);
         fetchData('pedidos');
@@ -92,6 +113,12 @@ export default function AdminDashboard() {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+
       if (res.ok) fetchData(activeTab);
       else alert(`Error al eliminar el ${tipo}.`);
     } catch (error) {
@@ -106,6 +133,12 @@ export default function AdminDashboard() {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(compraData)
         });
+        
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+
         if (res.ok) {
             toast.success("Ingreso de mercadería registrado con éxito");
             setCompraData({ producto_id: '', cantidad: '' });
@@ -128,16 +161,13 @@ export default function AdminDashboard() {
     }
   };
 
-  // --- LÓGICA DE FILTRADO Y BALANCE DE PEDIDOS ---
   let pedidosFiltrados = [];
   let balanceTotalPagado = 0;
 
   if (activeTab === 'pedidos') {
     pedidosFiltrados = data.filter(pedido => {
-      // 1. Filtrar por estado
       if (filtroEstado && pedido.estado !== filtroEstado) return false;
       
-      // 2. Filtrar por fechas
       const fechaPedido = new Date(pedido.fecha);
       if (filtroDesde) {
         const desde = new Date(`${filtroDesde}T00:00:00`);
@@ -151,7 +181,6 @@ export default function AdminDashboard() {
       return true;
     });
 
-    // 3. Calcular balance solo de lo que ingresó plata (pagado, enviado, entregado)
     balanceTotalPagado = pedidosFiltrados
       .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.estado))
       .reduce((sum, p) => sum + parseFloat(p.total_final), 0);
@@ -201,7 +230,6 @@ export default function AdminDashboard() {
           ) : (
             <div className="w-full">
               
-              {/* --- RENDER DE REGISTRO DE COMPRAS --- */}
               {activeTab === 'compras' && (
                 <div className="p-8 max-w-xl mx-auto">
                   <div className="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
@@ -213,7 +241,6 @@ export default function AdminDashboard() {
                           value={compraData.producto_id}
                           onChange={(e) => setCompraData({...compraData, producto_id: e.target.value})}
                         >
-                          {/* ESTÉTICA MEJORADA: Opción deshabilitada y gris */}
                           <option value="" disabled className="text-gray-400">Buscar en catálogo...</option>
                           {data.map(p => <option key={p.id} value={p.id} className="text-black">{p.nombre} (Stock actual: {p.stock})</option>)}
                         </select>
@@ -254,7 +281,6 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* --- HEADER DE FILTROS PARA PEDIDOS --- */}
               {activeTab === 'pedidos' && (
                 <div className="p-6 bg-gray-50/80 border-b border-gray-100 flex flex-col xl:flex-row gap-4 justify-between items-center">
                   
@@ -292,7 +318,6 @@ export default function AdminDashboard() {
               )}
 
               <table className="w-full text-left border-collapse">
-              {/* --- RENDER DE PEDIDOS --- */}
               {activeTab === 'pedidos' && (
                 <>
                   <thead className="bg-gray-50/80 text-xs font-bold uppercase tracking-widest text-gray-500 border-b border-gray-100">
@@ -359,7 +384,6 @@ export default function AdminDashboard() {
                 </>
               )}
 
-              {/* --- RENDER DE USUARIOS --- */}
               {activeTab === 'usuarios' && (
                 <>
                   <thead className="bg-gray-50/80 text-xs font-bold uppercase tracking-widest text-gray-500 border-b border-gray-100">
@@ -409,7 +433,6 @@ export default function AdminDashboard() {
                 </>
               )}
 
-              {/* --- RENDER DE PRODUCTOS --- */}
               {activeTab === 'productos' && (
                 <>
                   <thead className="bg-gray-50/80 text-xs font-bold uppercase tracking-widest text-gray-500 border-b border-gray-100">
@@ -424,7 +447,7 @@ export default function AdminDashboard() {
                     {data.map(prod => (
                       <tr key={prod.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-5 font-bold text-black flex items-center gap-4">
-                          <img src={prod.image || 'https://via.placeholder.com/40'} alt={prod.nombre} className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
+                          <img src={prod.image || 'https://placehold.co/40x40/eeeeee/999999?text=Foto'} alt={prod.nombre} className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
                           {prod.nombre}
                         </td>
                         <td className="p-5 text-gray-500">{prod.categoria?.nombre || 'General'}</td>
@@ -450,7 +473,6 @@ export default function AdminDashboard() {
                 </>
               )}
 
-              {/* --- RENDER DE CATEGORÍAS --- */}
               {activeTab === 'categorias' && (
                 <>
                   <thead className="bg-gray-50/80 text-xs font-bold uppercase tracking-widest text-gray-500 border-b border-gray-100">
