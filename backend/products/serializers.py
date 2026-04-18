@@ -7,7 +7,10 @@ class VarianteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Variante
-        fields = ['id', 'sku', 'talle', 'color', 'precio_base', 'descuento_porcentual', 'stock_disponible', 'precio_final']
+        fields = [
+            'id', 'sku', 'talle', 'color', 'precio_base', 'descuento_porcentual', 
+            'stock_disponible', 'precio_final', 'imagen1', 'imagen2', 'imagen3', 'imagen4'
+        ]
 
 class ResenaSerializer(serializers.ModelSerializer):
     # Campos calculados para que encajen perfecto con tu diseño de React

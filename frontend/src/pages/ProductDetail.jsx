@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext'; // <-- NUEVO DE COMENT
-import { Link } from 'react-router-dom'; // <-- NUEVO DE COMENT
+import { useAuth } from '../context/AuthContext';
 import { ShoppingCart, ArrowLeft, ShieldCheck, Truck, Star, MessageSquare } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import { toast } from 'sonner';
@@ -21,12 +20,16 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [relatedProducts, setRelatedProducts] = useState([]);
 
-// --- ESTADOS PARA LAS RESEÑAS ---
+  // --- NUEVO ESTADO: GALERÍA DE IMÁGENES ---
+  const [activeImage, setActiveImage] = useState('');
+  const [availableImages, setAvailableImages] = useState([]);
+
+  // --- ESTADOS PARA LAS RESEÑAS ---
   const { isAuthenticated } = useAuth();
   const [ratingHover, setRatingHover] = useState(0);
   const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
   const [reviews, setReviews] = useState([]);
-  const [canComment, setCanComment] = useState(false); // <-- NUEVO ESTADO
+  const [canComment, setCanComment] = useState(false); 
 
   useEffect(() => {
     setLoading(true);
@@ -34,13 +37,22 @@ export default function ProductDetail() {
 
     fetch(`http://127.0.0.1:8000/api/productos/${id}/`)
       .then(res => res.json())
-    .then(data => {
+      .then(data => {
         setProduct(data);
-        setReviews(data.resenas || []); // <-- ESTO FALTABA: Guardar las reseñas del backend
+        setReviews(data.resenas || []);
+        
+        // Configuramos la variante inicial y sus fotos
         if (data.variantes && data.variantes.length > 0) {
-          setSelectedVariant(data.variantes[0]);
+          const defaultVariant = data.variantes[0];
+          setSelectedVariant(defaultVariant);
+          updateGallery(data.image, defaultVariant);
+        } else {
+          // Si no hay variantes, solo mostramos la foto principal
+          setActiveImage(data.image || 'https://via.placeholder.com/800');
+          setAvailableImages([data.image].filter(Boolean));
         }
-        // --- NUEVA LÓGICA: ¿Puede Comentar? ---
+
+        // --- VERIFICAR SI PUEDE COMENTAR ---
         const token = localStorage.getItem('token');
         if (isAuthenticated && token) {
           fetch(`http://127.0.0.1:8000/api/productos/${id}/puedo-comentar/`, {
@@ -52,7 +64,7 @@ export default function ProductDetail() {
           })
           .catch(err => console.error("Error verificando permisos de reseña:", err));
         }
-        // -------------------------------------
+
         return fetch('http://127.0.0.1:8000/api/productos/');
       })
       .then(res => res.json())
@@ -65,10 +77,40 @@ export default function ProductDetail() {
         console.error(err);
         setLoading(false);
       });
-  }, [id, isAuthenticated]); // <-- IMPORTANTE: Agregamos isAuthenticated a las dependencias
+  }, [id, isAuthenticated]);
 
-  // --- NUEVO: MANEJADOR DEL FORMULARIO DE RESEÑAS ---
-// --- MANEJADOR DEL FORMULARIO DE RESEÑAS ---
+  // --- FUNCIÓN PARA ACTUALIZAR LA GALERÍA CUANDO CAMBIA LA VARIANTE ---
+  const updateGallery = (mainProductImage, variant) => {
+    if (!variant) return;
+
+    // Recolectamos todas las imágenes válidas: primero las de la variante, luego la del producto
+    const images = [
+      variant.imagen1,
+      variant.imagen2,
+      variant.imagen3,
+      variant.imagen4,
+      mainProductImage
+    ].filter(Boolean); // Filter(Boolean) quita los nulos o undefined
+
+    // Si hay imágenes, mostramos la primera por defecto
+    if (images.length > 0) {
+      setAvailableImages(images);
+      setActiveImage(images[0]);
+    } else {
+      // Fallback si nadie subió nada
+      setAvailableImages([]);
+      setActiveImage('https://via.placeholder.com/800');
+    }
+  };
+
+  // Escuchamos el cambio de variante para actualizar las fotitos
+  useEffect(() => {
+    if (product && selectedVariant) {
+      updateGallery(product.image, selectedVariant);
+    }
+  }, [selectedVariant]);
+
+  // --- MANEJADOR DEL FORMULARIO DE RESEÑAS ---
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (newReview.comment.trim() === '') return;
@@ -93,9 +135,8 @@ export default function ProductDetail() {
         const reviewData = await res.json();
         setReviews([reviewData, ...reviews]); 
         setNewReview({ rating: 5, comment: '' });
-        toast.success("¡Gracias por tu opinión!"); // Mensaje de éxito
+        toast.success("¡Gracias por tu opinión!"); 
       } else {
-        // --- NUEVO: Atrapamos el error de Django y lo mostramos ---
         const errorData = await res.json();
         toast.error(errorData.error || "Ocurrió un error al publicar.");
       }
@@ -109,6 +150,8 @@ export default function ProductDetail() {
   if (!product) return <div className="pt-32 text-center font-bold">Producto no encontrado</div>;
 
   const displayPrice = selectedVariant?.precio_final || selectedVariant?.precio_base || 0;
+  const oldPrice = selectedVariant?.precio_base;
+  const isOferta = selectedVariant && selectedVariant.precio_final < selectedVariant.precio_base;
 
   return (
     <div className="pt-28 pb-16 max-w-7xl mx-auto px-6 min-h-screen">
@@ -117,17 +160,41 @@ export default function ProductDetail() {
       </button>
 
       {/* 1. SECCIÓN PRINCIPAL DEL PRODUCTO */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        {/* Imagen */}
-        <div className="bg-gray-100 rounded-3xl aspect-square overflow-hidden flex items-center justify-center">
-          <img 
-            src={product.image || 'https://via.placeholder.com/800'} 
-            alt={product.nombre} 
-            className="w-full h-full object-cover mix-blend-multiply"
-          />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-16">
+        
+        {/* --- COLUMNA DE IMÁGENES --- */}
+        <div className="flex flex-col gap-4">
+          {/* Imagen Principal Grande */}
+          <div className="bg-gray-50 rounded-3xl aspect-square overflow-hidden flex items-center justify-center border border-gray-100 relative group">
+            {isOferta && (
+              <span className="absolute top-6 left-6 bg-green-500 text-white font-black px-4 py-2 rounded-xl text-sm z-10 shadow-lg shadow-green-200">
+                OFERTA
+              </span>
+            )}
+            <img 
+              src={activeImage} 
+              alt={product.nombre} 
+              className="w-full h-full object-cover mix-blend-multiply transition-transform duration-500 group-hover:scale-105"
+            />
+          </div>
+
+          {/* Galería de Miniaturas */}
+          {availableImages.length > 1 && (
+            <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+              {availableImages.map((imgUrl, index) => (
+                <button 
+                  key={index}
+                  onClick={() => setActiveImage(imgUrl)}
+                  className={`w-20 h-20 flex-shrink-0 rounded-2xl overflow-hidden border-2 transition-all ${activeImage === imgUrl ? 'border-black scale-100 shadow-md' : 'border-transparent opacity-60 hover:opacity-100 scale-95'}`}
+                >
+                  <img src={imgUrl} alt={`Vista ${index + 1}`} className="w-full h-full object-cover mix-blend-multiply bg-gray-50" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Detalles */}
+        {/* --- COLUMNA DE DETALLES --- */}
         <div className="flex flex-col justify-center">
           <span className="text-sm text-gray-500 font-bold uppercase tracking-widest mb-2">
             {product.categoria_nombre}
@@ -136,7 +203,6 @@ export default function ProductDetail() {
             {product.nombre}
           </h1>
           
-          {/* Estrellitas debajo del título */}
           <div className="flex items-center gap-2 mb-4">
             <div className="flex text-yellow-400">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -146,9 +212,17 @@ export default function ProductDetail() {
             <span className="text-sm font-bold text-gray-500">5.0 ({reviews.length} opiniones)</span>
           </div>
 
-          <p className="text-3xl font-black mb-6 border-b border-gray-100 pb-6">
-            {formatPrice(displayPrice)}
-          </p>
+          {/* Precios: Si hay oferta tachamos el viejo */}
+          <div className="mb-6 border-b border-gray-100 pb-6 flex items-end gap-4">
+            <p className={`text-4xl font-black ${isOferta ? 'text-green-600' : 'text-black'}`}>
+              {formatPrice(displayPrice)}
+            </p>
+            {isOferta && (
+              <p className="text-xl font-bold text-gray-400 line-through mb-1">
+                {formatPrice(oldPrice)}
+              </p>
+            )}
+          </div>
           
           <div className="mb-8 text-gray-600 leading-relaxed">
             <h3 className="font-bold text-black mb-2 uppercase tracking-widest text-sm">Descripción</h3>
@@ -208,29 +282,28 @@ export default function ProductDetail() {
 
           {/* Confianza */}
           <div className="mt-8 grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3 text-sm font-medium text-gray-600">
-              <ShieldCheck className="text-green-500" size={20} /> Compra Protegida
+            <div className="flex items-center gap-3 text-sm font-medium text-gray-600 bg-green-50 p-4 rounded-2xl border border-green-100">
+              <ShieldCheck className="text-green-500 flex-shrink-0" size={24} /> 
+              <span>Compra 100% Protegida</span>
             </div>
-            <div className="flex items-center gap-3 text-sm font-medium text-gray-600">
-              <Truck className="text-blue-500" size={20} /> Envío Rápido
+            <div className="flex items-center gap-3 text-sm font-medium text-gray-600 bg-blue-50 p-4 rounded-2xl border border-blue-100">
+              <Truck className="text-blue-500 flex-shrink-0" size={24} /> 
+              <span>Envío Seguro y Rápido</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. NUEVA SECCIÓN: RESEÑAS Y OPINIONES */}
-      <div className="mt-24 pt-12 border-t border-gray-100">
+      {/* 2. SECCIÓN DE RESEÑAS */}
+      <div className="mt-16 pt-12 border-t border-gray-100">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           
-       {/* Columna Izquierda: Formulario para dejar reseña */}
           <div className="lg:col-span-1">
             <h2 className="text-2xl font-black mb-6 flex items-center gap-2">
               <MessageSquare size={24} /> Dejanos tu opinión
             </h2>
             
-            {/* LOGICA VISUAL DEL FORMULARIO DE RESEÑA */}
             {!isAuthenticated ? (
-              // 1. NO LOGUEADO
               <div className="bg-gray-50 p-8 rounded-3xl border border-gray-100 text-center">
                 <MessageSquare className="mx-auto text-gray-300 mb-4" size={40} />
                 <h3 className="font-bold text-gray-700 mb-2">¿Querés dejar tu opinión?</h3>
@@ -240,14 +313,12 @@ export default function ProductDetail() {
                 </Link>
               </div>
             ) : !canComment ? (
-              // 2. LOGUEADO, PERO NO COMPRÓ O NO RECIBIÓ
               <div className="bg-orange-50 p-8 rounded-3xl border border-orange-100 text-center">
                 <ShieldCheck className="mx-auto text-orange-400 mb-4" size={40} />
                 <h3 className="font-bold text-orange-800 mb-2">Solo compras verificadas</h3>
                 <p className="text-sm text-orange-600">Para mantener la transparencia, solo permitimos reseñas de clientes que hayan comprado y recibido este producto.</p>
               </div>
             ) : (
-              // 3. LOGUEADO, COMPRÓ Y RECIBIÓ (MOSTRAR FORMULARIO)
               <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
                 <div className="mb-4">
                   <label className="block text-sm font-bold text-gray-700 mb-2">Calificación</label>
@@ -294,37 +365,39 @@ export default function ProductDetail() {
             )}
           </div>
 
-          {/* Columna Derecha: Lista de Reseñas */}
           <div className="lg:col-span-2">
             <h3 className="text-xl font-bold mb-6">Opiniones de clientes ({reviews.length})</h3>
             <div className="space-y-6">
-              {reviews.map((rev) => (
-                <div key={rev.id} className="border-b border-gray-100 pb-6 last:border-0">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <span className="font-bold text-black block">{rev.autor}</span>
-                      <span className="text-xs text-gray-400">{rev.fecha}</span>
+              {reviews.length === 0 ? (
+                <p className="text-gray-400 font-medium">Aún no hay reseñas para este producto. ¡Sé el primero en opinar!</p>
+              ) : (
+                reviews.map((rev) => (
+                  <div key={rev.id} className="border-b border-gray-100 pb-6 last:border-0">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="font-bold text-black block">{rev.autor}</span>
+                        <span className="text-xs text-gray-400">{rev.fecha}</span>
+                      </div>
+                      <div className="flex text-yellow-400">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star 
+                            key={star} 
+                            size={14} 
+                            className={star <= rev.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200"} 
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex text-yellow-400">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Star 
-                          key={star} 
-                          size={14} 
-                          className={star <= rev.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200"} 
-                        />
-                      ))}
-                    </div>
+                    <p className="text-gray-600 text-sm mt-2">{rev.comentario}</p>
                   </div>
-                  <p className="text-gray-600 text-sm mt-2">{rev.comentario}</p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* 3. SECCIÓN: TAMBIÉN TE PUEDE INTERESAR */}
+      {/* 3. SECCIÓN RECOMENDACIONES */}
       {relatedProducts.length > 0 && (
         <div className="mt-16 pt-12 border-t border-gray-100">
           <h2 className="text-3xl font-black mb-8 text-center md:text-left">También te puede interesar</h2>

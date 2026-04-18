@@ -1,7 +1,7 @@
 import mercadopago
 from django.conf import settings
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -12,7 +12,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, ProtectedError
 from django.shortcuts import redirect
 
 from .models import Categoria, Producto, Variante, Pedido, ItemPedido, PerfilUsuario, Direccion, Resena
@@ -32,9 +32,19 @@ class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Producto.objects.all() 
+    # ¡MAGIA!: El catálogo público ahora ignora automáticamente los ocultos
+    queryset = Producto.objects.filter(activo=True).order_by('-id') 
     serializer_class = ProductSerializer
     permission_classes = [IsAdminOrReadOnly]
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"error": "No podés eliminar este producto porque ya tiene ventas. Te recomendamos ocultarlo (tocar el ícono del ojo)."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 # --- VISTAS DE PERFIL Y DIRECCIONES ---
 @api_view(['GET', 'PUT'])
@@ -193,6 +203,7 @@ def admin_usuarios(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 @authentication_classes([JWTAuthentication])
+@parser_classes([MultiPartParser, FormParser])
 def crear_producto_con_variante(request):
     try:
         categoria_id = request.data.get('categoria')
@@ -211,16 +222,31 @@ def crear_producto_con_variante(request):
         )
 
         sku_generado = request.data.get('sku') or f"SKU-{get_random_string(8).upper()}"
-        precio_base = request.data.get('precio_base') or 0
         stock = request.data.get('stock') or 0
+        
+        precio_base_str = request.data.get('precio_base') or 0
+        precio_base = Decimal(str(precio_base_str).replace(',', '.'))
+        
+        precio_final_str = request.data.get('precio_final')
+        descuento_calculado = 0
+        
+        if precio_final_str and str(precio_final_str).strip() not in ['', 'null', 'undefined']:
+            precio_final = Decimal(str(precio_final_str).replace(',', '.'))
+            if precio_final < precio_base and precio_base > 0:
+                descuento_calculado = int(round((1 - (precio_final / precio_base)) * 100))
         
         Variante.objects.create(
             producto=producto,
             sku=sku_generado,
             talle=request.data.get('talle', 'Único'),
             color=request.data.get('color', 'Único'),
-            precio_base=Decimal(precio_base),
-            stock_disponible=int(stock)
+            precio_base=precio_base,
+            descuento_porcentual=descuento_calculado,
+            stock_disponible=int(stock),
+            imagen1=request.FILES.get('imagen1'),
+            imagen2=request.FILES.get('imagen2'),
+            imagen3=request.FILES.get('imagen3'),
+            imagen4=request.FILES.get('imagen4')
         )
 
         return Response({"mensaje": "Producto y variante inicial creados exitosamente"}, status=status.HTTP_201_CREATED)
@@ -235,54 +261,170 @@ def admin_productos(request):
     productos = Producto.objects.all().order_by('-id')
     data = []
     for p in productos:
-        v = p.variantes.first()
+        v_first = p.variantes.first()
+        
+        variantes_data = []
+        for v in p.variantes.all():
+            variantes_data.append({
+                "id": v.id,
+                "sku": v.sku,
+                "talle": v.talle,
+                "color": v.color,
+                "precio_base": v.precio_base,
+                "precio_final": v.precio_final,
+                "stock": v.stock_disponible,
+                "imagen1": v.imagen1.url if v.imagen1 else None,
+                "imagen2": v.imagen2.url if v.imagen2 else None,
+                "imagen3": v.imagen3.url if v.imagen3 else None,
+                "imagen4": v.imagen4.url if v.imagen4 else None,
+            })
+
         data.append({
             "id": p.id,
             "nombre": p.nombre,
             "descripcion": p.descripcion,
             "categoria": {"id": p.categoria.id, "nombre": p.categoria.nombre} if p.categoria else None,
             "image": p.imagen.url if p.imagen else None,
-            "precio_base": v.precio_base if v else 0,
-            "stock": v.stock_disponible if v else 0,
-            "talle": v.talle if v else 'Único',
-            "color": v.color if v else 'Único',
-            "sku": v.sku if v else ''
+            "precio_base": v_first.precio_base if v_first else 0,
+            "precio_final": v_first.precio_final if v_first else 0,
+            "stock": v_first.stock_disponible if v_first else 0,
+            "talle": v_first.talle if v_first else 'Único',
+            "color": v_first.color if v_first else 'Único',
+            "sku": v_first.sku if v_first else '',
+            "activo": p.activo, # AHORA SÍ: el panel sabe si está visible u oculto
+            "variantes": variantes_data
         })
     return Response(data)
 
 @api_view(['PUT'])
 @permission_classes([IsAdminUser])
 @authentication_classes([JWTAuthentication])
+@parser_classes([MultiPartParser, FormParser])
 def admin_editar_producto(request, pk):
     try:
         producto = Producto.objects.get(pk=pk)
-        producto.nombre = request.data.get('nombre', producto.nombre)
-        producto.descripcion = request.data.get('descripcion', producto.descripcion)
+        
+        nombre = request.data.get('nombre')
+        if nombre: producto.nombre = str(nombre).strip()
+            
+        descripcion = request.data.get('descripcion')
+        if descripcion: producto.descripcion = str(descripcion).strip()
         
         cat_id = request.data.get('categoria')
-        if cat_id:
-            producto.categoria_id = cat_id
+        if cat_id and str(cat_id).strip() not in ['', 'null', 'undefined']:
+            try: producto.categoria_id = int(cat_id)
+            except ValueError: pass
             
-        if 'image' in request.FILES:
+        if request.data.get('clear_image') == 'true':
+            producto.imagen.delete(save=False)
+            producto.imagen = None
+        elif 'image' in request.FILES:
             producto.imagen = request.FILES['image']
+            
         producto.save()
 
-        variante = producto.variantes.first()
+        variante_id = request.data.get('variante_id')
+        if variante_id and str(variante_id).strip() not in ['', 'null', 'undefined']:
+            variante = Variante.objects.filter(id=int(variante_id), producto=producto).first()
+        else:
+            variante = producto.variantes.first() 
+
         if variante:
-            # Salvavidas por si llega un campo vacío desde el frontend
-            precio = request.data.get('precio_base')
+            precio_str = request.data.get('precio_base')
+            precio_oferta_str = request.data.get('precio_final')
             stock = request.data.get('stock')
             
-            variante.precio_base = Decimal(precio) if precio else variante.precio_base
-            variante.stock_disponible = int(stock) if stock else variante.stock_disponible
-            variante.talle = request.data.get('talle', variante.talle)
-            variante.color = request.data.get('color', variante.color)
-            variante.sku = request.data.get('sku', variante.sku)
+            if precio_str and str(precio_str).strip() not in ['', 'null', 'undefined']:
+                try: variante.precio_base = Decimal(str(precio_str).replace(',', '.'))
+                except Exception: pass
+            
+            if precio_oferta_str and str(precio_oferta_str).strip() not in ['', 'null', 'undefined']:
+                try:
+                    precio_oferta = Decimal(str(precio_oferta_str).replace(',', '.'))
+                    if precio_oferta < variante.precio_base and variante.precio_base > 0:
+                        descuento = (1 - (precio_oferta / variante.precio_base)) * 100
+                        variante.descuento_porcentual = int(round(descuento))
+                    else:
+                        variante.descuento_porcentual = 0
+                except Exception:
+                    variante.descuento_porcentual = 0
+            else:
+                variante.descuento_porcentual = 0
+
+            if stock is not None and str(stock).strip() not in ['', 'null', 'undefined']:
+                try: variante.stock_disponible = int(stock)
+                except ValueError: pass
+                
+            talle = request.data.get('talle')
+            if talle and str(talle).strip() not in ['', 'null', 'undefined']: variante.talle = str(talle).strip()
+                
+            color = request.data.get('color')
+            if color and str(color).strip() not in ['', 'null', 'undefined']: variante.color = str(color).strip()
+                
+            sku = request.data.get('sku')
+            if sku and str(sku).strip() not in ['', 'null', 'undefined']: variante.sku = str(sku).strip()
+            
+            for i in range(1, 5):
+                img_key = f'imagen{i}'
+                clear_key = f'clear_imagen{i}'
+                
+                if request.data.get(clear_key) == 'true':
+                    img_field = getattr(variante, img_key)
+                    if img_field:
+                        img_field.delete(save=False)
+                    setattr(variante, img_key, None)
+                elif img_key in request.FILES:
+                    setattr(variante, img_key, request.FILES[img_key])
+                
             variante.save()
 
         return Response({"mensaje": "Producto actualizado con éxito"})
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"❌ ERROR AL EDITAR PRODUCTO: {str(e)}") 
+        return Response({"error": f"Ocurrió un problema: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@authentication_classes([JWTAuthentication])
+@parser_classes([MultiPartParser, FormParser])
+def admin_crear_variante(request, producto_id):
+    try:
+        producto = Producto.objects.get(id=producto_id)
+
+        sku_generado = request.data.get('sku') or f"SKU-{get_random_string(8).upper()}"
+        stock = request.data.get('stock') or 0
+        
+        precio_base_str = request.data.get('precio_base') or 0
+        precio_base = Decimal(str(precio_base_str).replace(',', '.'))
+        
+        precio_final_str = request.data.get('precio_final')
+        descuento_calculado = 0
+        
+        if precio_final_str and str(precio_final_str).strip() not in ['', 'null', 'undefined']:
+            precio_final = Decimal(str(precio_final_str).replace(',', '.'))
+            if precio_final < precio_base and precio_base > 0:
+                descuento_calculado = int(round((1 - (precio_final / precio_base)) * 100))
+        
+        Variante.objects.create(
+            producto=producto,
+            sku=sku_generado,
+            talle=request.data.get('talle', 'Único'),
+            color=request.data.get('color', 'Único'),
+            precio_base=precio_base,
+            descuento_porcentual=descuento_calculado,
+            stock_disponible=int(stock),
+            imagen1=request.FILES.get('imagen1'),
+            imagen2=request.FILES.get('imagen2'),
+            imagen3=request.FILES.get('imagen3'),
+            imagen4=request.FILES.get('imagen4')
+        )
+
+        return Response({"mensaje": "Nueva variante añadida con éxito"}, status=status.HTTP_201_CREATED)
+
+    except Producto.DoesNotExist:
+        return Response({"error": "Producto no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
@@ -307,6 +449,24 @@ def admin_sumar_stock(request):
             
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# =========================================================
+# --- NUEVA FUNCIÓN: OCULTAR / MOSTRAR PRODUCTO ---
+# =========================================================
+@api_view(['PUT'])
+@permission_classes([IsAdminUser])
+@authentication_classes([JWTAuthentication])
+def admin_toggle_visibilidad(request, pk):
+    try:
+        producto = Producto.objects.get(pk=pk)
+        producto.activo = not producto.activo # Invierte el estado (de True a False o viceversa)
+        producto.save()
+        
+        estado = "visible" if producto.activo else "oculto"
+        return Response({"mensaje": f"El producto ahora está {estado} en la tienda."})
+    except Producto.DoesNotExist:
+        return Response({"error": "Producto no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
 
 # =========================================================
@@ -489,13 +649,11 @@ def mercadopago_redirect(request):
 def crear_resena(request, producto_id):
     try:
         producto = Producto.objects.get(id=producto_id)
-        # --- NUEVO: Verificamos si el usuario ya dejó una reseña ---
         if Resena.objects.filter(producto=producto, usuario=request.user).exists():
             return Response(
                 {"error": "Ya compartiste tu opinión sobre este producto. ¡Gracias!"}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-        # ------------------------------------------------------------
         
         rating = request.data.get('rating', 5)
         comentario = request.data.get('comentario', '')
@@ -522,23 +680,11 @@ def crear_resena(request, producto_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # =========================================================
-# --- VISTA PARA VALIDAR SI EL USUARIO PUEDE COMENTAR ---
-# =========================================================
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def verificar_compra_entregada(request, producto_id):
-    """
-    Verifica si el usuario logueado tiene al menos un pedido en estado 'entregado'
-    que contenga una variante de este producto específico.
-    """
     try:
         producto = Producto.objects.get(id=producto_id)
-        
-        # Buscamos si existe ALGÚN ItemPedido que:
-        # 1. Pertenezca al usuario actual
-        # 2. El estado del pedido sea 'entregado'
-        # 3. La variante del item pertenezca al producto que estamos viendo
         tiene_compra_entregada = ItemPedido.objects.filter(
             pedido__usuario=request.user,
             pedido__estado='entregado',

@@ -24,10 +24,12 @@ class Producto(models.Model):
     descripcion = models.TextField()
     categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE, related_name='productos')
     imagen = models.ImageField(upload_to='productos/', null=True, blank=True)
+    activo = models.BooleanField(default=True)
 
     def __str__(self): 
         return self.nombre
 
+# --- VARIANTE ---
 # --- VARIANTE ---
 class Variante(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='variantes')
@@ -38,6 +40,12 @@ class Variante(models.Model):
     descuento_porcentual = models.IntegerField(default=0)
     stock_disponible = models.PositiveIntegerField(default=0)
     qr_code = models.ImageField(upload_to='qrcodes/', blank=True, null=True)
+
+    # ---> ESTOS SON LOS 4 CAMPOS NUEVOS QUE FALTAN <---
+    imagen1 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+    imagen2 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+    imagen3 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+    imagen4 = models.ImageField(upload_to='variantes/', null=True, blank=True)
 
     @property
     def precio_final(self):
@@ -56,6 +64,37 @@ class Variante(models.Model):
     def __str__(self):
         return f"{self.producto.nombre} - {self.talle} / {self.color} ({self.sku})"
 
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='variantes')
+    sku = models.CharField(max_length=50, unique=True)
+    talle = models.CharField(max_length=10, null=True, blank=True)
+    color = models.CharField(max_length=50, null=True, blank=True)
+    precio_base = models.DecimalField(max_digits=10, decimal_places=2)
+    descuento_porcentual = models.IntegerField(default=0)
+    stock_disponible = models.PositiveIntegerField(default=0)
+    qr_code = models.ImageField(upload_to='qrcodes/', blank=True, null=True)
+    
+    # ---  4 IMÁGENES POR VARIANTE ---
+    imagen1 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+    imagen2 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+    imagen3 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+    imagen4 = models.ImageField(upload_to='variantes/', null=True, blank=True)
+
+    @property
+    def precio_final(self):
+        descuento = Decimal(self.descuento_porcentual) / Decimal(100)
+        return self.precio_base * (Decimal(1) - descuento)
+
+    def save(self, *args, **kwargs):
+        if self.sku and not self.qr_code:
+            qr_image = qrcode.make(self.sku)
+            buffer = BytesIO()
+            qr_image.save(buffer, format='PNG')
+            file_name = f'qr-{self.sku}.png'
+            self.qr_code.save(file_name, File(buffer), save=False)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.producto.nombre} - {self.talle} / {self.color} ({self.sku})"
 # --- CARRITO ---
 class Carrito(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE)

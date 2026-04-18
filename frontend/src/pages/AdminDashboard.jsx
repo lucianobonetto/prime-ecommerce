@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Users, Tag, LayoutDashboard, CheckCircle, Clock, XCircle, Edit3, Trash2, Plus, Search, Truck, ShoppingCart, Filter, Calendar, DollarSign } from 'lucide-react';
+import { Package, Users, Tag, LayoutDashboard, CheckCircle, Clock, XCircle, Edit3, Trash2, Plus, Search, Truck, ShoppingCart, Filter, Calendar, DollarSign, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProductForm from '../components/ProductForm';
@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   const [productoAEditar, setProductoAEditar] = useState(null);
   const [categoriaAEditar, setCategoriaAEditar] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [isAddingVariant, setIsAddingVariant] = useState(false);
 
   const [compraData, setCompraData] = useState({ producto_id: '', cantidad: '' });
 
@@ -32,7 +33,6 @@ export default function AdminDashboard() {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Redirección forzada si no está logueado
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/auth');
@@ -66,7 +66,6 @@ export default function AdminDashboard() {
 
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
       
-      // Control de Token Expirado
       if (res.status === 401) {
         logout();
         return;
@@ -119,10 +118,37 @@ export default function AdminDashboard() {
         return;
       }
 
-      if (res.ok) fetchData(activeTab);
-      else alert(`Error al eliminar el ${tipo}.`);
+      if (res.ok) {
+        toast.success(`${tipo === 'producto' ? 'Producto' : 'Categoría'} eliminado con éxito.`);
+        fetchData(activeTab);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || `Error al eliminar el ${tipo}.`);
+      }
     } catch (error) {
       console.error("Error eliminando:", error);
+      toast.error("Error de conexión al intentar eliminar.");
+    }
+  };
+
+  const handleToggleVisibilidad = async (id) => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/admin/productos/${id}/toggle-visibilidad/`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.status === 401) {
+        logout(); return;
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.mensaje);
+        fetchData('productos'); 
+      }
+    } catch (error) {
+      toast.error("Error de conexión al cambiar visibilidad.");
     }
   };
 
@@ -215,7 +241,7 @@ export default function AdminDashboard() {
           
           {(activeTab === 'productos' || activeTab === 'categorias') && (
             <button 
-              onClick={() => { setProductoAEditar(null); setCategoriaAEditar(null); setShowForm(true); }} 
+              onClick={() => { setProductoAEditar(null); setCategoriaAEditar(null); setIsAddingVariant(false); setShowForm(true); }} 
               className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors"
               ><Plus size={16} /> Nuevo
             </button>
@@ -271,7 +297,7 @@ export default function AdminDashboard() {
                       </div>
 
                       <button 
-                        onClick={() => { setProductoAEditar(null); setShowForm(true); }}
+                        onClick={() => { setProductoAEditar(null); setIsAddingVariant(false); setShowForm(true); }}
                         className="w-full bg-black text-white font-black py-4 rounded-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-gray-800 transition-all"
                       >
                         <Plus size={16}/> Dar de Alta Nuevo Producto
@@ -440,30 +466,63 @@ export default function AdminDashboard() {
                       <th className="p-5">Producto</th>
                       <th className="p-5">Categoría</th>
                       <th className="p-5">Inventario</th>
+                      <th className="p-5 text-center">Estado</th>
                       <th className="p-5 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-sm">
                     {data.map(prod => (
-                      <tr key={prod.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={prod.id} className={`transition-colors ${!prod.activo ? 'bg-gray-50/80 opacity-70' : 'hover:bg-gray-50/50'}`}>
                         <td className="p-5 font-bold text-black flex items-center gap-4">
-                          <img src={prod.image || 'https://placehold.co/40x40/eeeeee/999999?text=Foto'} alt={prod.nombre} className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
+                          <img src={prod.image || 'https://placehold.co/40x40/eeeeee/999999?text=Foto'} alt={prod.nombre} className={`w-10 h-10 rounded-lg object-cover bg-gray-100 ${!prod.activo && 'grayscale'}`} />
                           {prod.nombre}
                         </td>
                         <td className="p-5 text-gray-500">{prod.categoria?.nombre || 'General'}</td>
                         <td className="p-5 text-gray-500 text-xs">
-                          <span className="block font-bold text-black text-sm">{formatPrice(prod.precio_base)}</span>
-                          Stock: {prod.stock} u.
+                          {Number(prod.precio_final) < Number(prod.precio_base) ? (
+                            <>
+                              <span className="block font-bold text-gray-400 text-xs line-through mb-0.5">{formatPrice(prod.precio_base)}</span>
+                              <span className="block font-black text-green-600 text-sm mb-1">{formatPrice(prod.precio_final)}</span>
+                            </>
+                          ) : (
+                            <span className="block font-bold text-black text-sm mb-1">{formatPrice(prod.precio_base)}</span>
+                          )}
+                          Stock Total: {prod.variantes?.reduce((acc, curr) => acc + curr.stock, 0) || prod.stock} u.
+                        </td>
+                        <td className="p-5 text-center">
+                          {prod.activo ? (
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-green-200">Visible</span>
+                          ) : (
+                            <span className="bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-gray-300">Oculto</span>
+                          )}
                         </td>
                         <td className="p-5 text-right">
                           <button 
-                            onClick={() => { setProductoAEditar(prod); setShowForm(true); }} 
-                            className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors mr-2">
+                            onClick={() => handleToggleVisibilidad(prod.id)} 
+                            className="text-gray-500 hover:bg-gray-200 p-1.5 rounded-lg transition-colors mr-2"
+                            title={prod.activo ? "Ocultar de la tienda" : "Mostrar en la tienda"}
+                          >
+                            {prod.activo ? <EyeOff size={16}/> : <Eye size={16}/>}
+                          </button>
+                          <button 
+                            onClick={() => { setProductoAEditar(prod); setIsAddingVariant(true); setShowForm(true); }} 
+                            className="text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors mr-2"
+                            title="Añadir Nueva Variante"
+                          >
+                            <Plus size={16}/>
+                          </button>
+                          <button 
+                            onClick={() => { setProductoAEditar(prod); setIsAddingVariant(false); setShowForm(true); }} 
+                            className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors mr-2"
+                            title="Editar Producto"
+                          >
                             <Edit3 size={16}/>
                           </button>
                           <button 
                             onClick={() => handleDelete(prod.id, 'producto')} 
-                            className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
+                            className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                            title="Eliminar Producto"
+                          >
                             <Trash2 size={16}/>
                           </button>
                         </td>
@@ -513,6 +572,7 @@ export default function AdminDashboard() {
               onClose={() => setShowForm(false)} 
               refreshData={() => fetchData(activeTab)}
               productoAEditar={productoAEditar}
+              isAddingVariant={isAddingVariant}
             />
           )}
 

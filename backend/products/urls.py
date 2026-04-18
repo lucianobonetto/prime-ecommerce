@@ -28,7 +28,7 @@ urlpatterns = [
     path('mis-direcciones/', views.mis_direcciones, name='mis-direcciones'),
     path('mis-direcciones/<int:pk>/', views.direccion_detalle, name='direccion-detalle'),
 
-    # --- PANEL DE ADMINISTRADOR (NUEVO) ---
+    # --- PANEL DE ADMINISTRADOR ---
     path('admin/pedidos/', views.admin_pedidos, name='admin-pedidos'),
     path('admin/pedidos/<int:pk>/estado/', views.admin_actualizar_pedido, name='admin-actualizar-pedido'),
     path('admin/usuarios/', views.admin_usuarios, name='admin-usuarios'),
@@ -36,7 +36,12 @@ urlpatterns = [
     path('admin/productos-completos/', views.admin_productos, name='admin_productos'),
     path('admin/editar-producto/<int:pk>/', views.admin_editar_producto, name='admin_editar_producto'),
     path('admin/sumar-stock/', views.admin_sumar_stock, name='admin_sumar_stock'),
+    path('admin/productos/<int:producto_id>/variantes/', views.admin_crear_variante, name='admin_crear_variante'),
+    
+    # ---> ACÁ ESTÁ LA RUTA DEL INTERRUPTOR QUE SOLUCIONA EL ERROR 404 <---
+    path('admin/productos/<int:pk>/toggle-visibilidad/', views.admin_toggle_visibilidad, name='admin_toggle_visibilidad'),
 
+    # --- RESEÑAS ---
     path('productos/<int:producto_id>/resenas/', views.crear_resena, name='crear-resena'),
     path('productos/<int:producto_id>/puedo-comentar/', views.verificar_compra_entregada, name='verificar_compra'),
 ]
